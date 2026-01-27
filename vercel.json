@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/scheduler",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/source-fetch",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

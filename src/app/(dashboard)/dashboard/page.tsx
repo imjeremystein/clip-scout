@@ -17,6 +17,9 @@ import {
   Calendar,
   ArrowRight,
   Star,
+  Newspaper,
+  Rss,
+  AlertCircle,
 } from "lucide-react";
 import {
   getDashboardStats,
@@ -24,6 +27,8 @@ import {
   getTopCandidatesToday,
   getScheduledRuns,
 } from "@/server/db/dashboard";
+import { getTopNews, getUnmatchedNewsCount } from "@/server/actions/news";
+import { getNextScheduledFetches, getSourceHealthStats } from "@/server/actions/sources";
 import type { RecentRun, TopCandidate, ScheduledRun } from "@/types";
 
 function StatusBadge({ status }: { status: string }) {
@@ -85,11 +90,15 @@ export default async function DashboardPage() {
   const { orgId } = await getTenantContext();
 
   // Fetch all dashboard data in parallel
-  const [stats, recentRuns, topCandidates, scheduledRuns] = await Promise.all([
+  const [stats, recentRuns, topCandidates, scheduledRuns, topNews, unmatchedCount, nextFetches, sourceHealth] = await Promise.all([
     getDashboardStats(orgId),
     getRecentRuns(orgId, 5),
     getTopCandidatesToday(orgId, 5),
     getScheduledRuns(orgId, 5),
+    getTopNews(5),
+    getUnmatchedNewsCount(),
+    getNextScheduledFetches(5),
+    getSourceHealthStats(),
   ]);
 
   return (
@@ -154,6 +163,58 @@ export default async function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{stats.shortlisted}</div>
             <p className="text-xs text-muted-foreground">Ready for export</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* News & Source Stats */}
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Sources</CardTitle>
+            <Rss className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{sourceHealth.active}</div>
+            <p className="text-xs text-muted-foreground">
+              {sourceHealth.successRate}% success rate (24h)
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Unmatched News</CardTitle>
+            <Newspaper className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{unmatchedCount}</div>
+            <p className="text-xs text-muted-foreground">Need clip pairing</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Source Errors</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${sourceHealth.error > 0 ? "text-red-600" : ""}`}>
+              {sourceHealth.error}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {sourceHealth.rateLimited} rate limited
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Recent Fetches</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{sourceHealth.recentSuccess}</div>
+            <p className="text-xs text-muted-foreground">
+              {sourceHealth.recentFailure} failed (24h)
+            </p>
           </CardContent>
         </Card>
       </div>
@@ -255,6 +316,123 @@ export default async function DashboardPage() {
                 <Link href="/queries/new">
                   <Button variant="link" size="sm">
                     Create a scheduled query
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Top News & Scheduled Fetches */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Top News */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Top News</CardTitle>
+              <Link href="/news">
+                <Button variant="ghost" size="sm">
+                  View all
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+            <CardDescription>Highest importance news items</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {topNews.length > 0 ? (
+              <div className="space-y-4">
+                {topNews.map((news) => (
+                  <div
+                    key={news.id}
+                    className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
+                  >
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <Link href={`/news/${news.id}`} className="hover:underline">
+                        <p className="text-sm font-medium line-clamp-1">
+                          {news.headline}
+                        </p>
+                      </Link>
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline" className="text-xs">
+                          {news.sport}
+                        </Badge>
+                        <span>{news.source.name}</span>
+                      </div>
+                    </div>
+                    <div className="ml-4 text-right">
+                      <p className="text-sm font-medium">
+                        {Math.round(news.importanceScore)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">score</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Newspaper className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No news items yet</p>
+                <Link href="/admin/sources">
+                  <Button variant="link" size="sm">
+                    Configure news sources
+                  </Button>
+                </Link>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Next Scheduled Fetches */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle>Scheduled Fetches</CardTitle>
+              <Link href="/admin/sources">
+                <Button variant="ghost" size="sm">
+                  Manage
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+            <CardDescription>Upcoming source fetches</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {nextFetches.length > 0 ? (
+              <div className="space-y-4">
+                {nextFetches.map((source) => (
+                  <div
+                    key={source.id}
+                    className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
+                  >
+                    <div className="space-y-1">
+                      <Link href={`/admin/sources/${source.id}`} className="hover:underline">
+                        <p className="text-sm font-medium">{source.name}</p>
+                      </Link>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="text-xs">
+                          {source.sport}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {source.type.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Clock className="h-4 w-4" />
+                      {source.nextFetchAt ? formatScheduledTime(source.nextFetchAt) : "Not scheduled"}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Rss className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p>No scheduled sources</p>
+                <Link href="/admin/sources/new">
+                  <Button variant="link" size="sm">
+                    Create a source
                   </Button>
                 </Link>
               </div>

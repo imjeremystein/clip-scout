@@ -117,10 +117,64 @@ enum ExportFormat {
 
 enum ScheduleType {
   MANUAL
+  HOURLY
   DAILY
   WEEKDAYS
   WEEKLY
   CUSTOM
+}
+
+// ============================================================================
+// SOURCE & NEWS ENUMS
+// ============================================================================
+
+enum SourceType {
+  TWITTER_SEARCH
+  TWITTER_LIST
+  RSS_FEED
+  WEBSITE_SCRAPE
+  DRAFTKINGS_API
+  ESPN_API
+}
+
+enum SourceStatus {
+  ACTIVE
+  PAUSED
+  ERROR
+  RATE_LIMITED
+}
+
+enum NewsItemType {
+  TRADE
+  INJURY
+  GAME_RESULT
+  BETTING_LINE
+  RUMOR
+  ANALYSIS
+  BREAKING
+  SCHEDULE
+}
+
+enum ClipMatchStatus {
+  PENDING
+  MATCHED
+  NO_MATCH
+  DISMISSED
+}
+
+// ============================================================================
+// USER ROLE ENUMS (for internal tool)
+// ============================================================================
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  DISABLED
 }
 
 // ============================================================================
@@ -183,8 +237,8 @@ model Organization {
   plan     String @default("free") @db.VarChar(50)
 
   // YouTube API configuration
-  youtubeApiKeyEncrypted String? @map("youtube_api_key_encrypted") @db.Text
-  youtubeQuotaUsed       Int     @default(0) @map("youtube_quota_used")
+  youtubeApiKeyEncrypted String?  @map("youtube_api_key_encrypted") @db.Text
+  youtubeQuotaUsed       Int      @default(0) @map("youtube_quota_used")
   youtubeQuotaResetAt    DateTime @default(now()) @map("youtube_quota_reset_at")
 
   // Settings
@@ -202,21 +256,35 @@ model Organization {
   auditEvents      AuditEvent[]
   exportJobs       ExportJob[]
 
+  // News ingestion relations
+  sources       Source[]
+  newsItems     NewsItem[]
+  oddsSnapshots OddsSnapshot[]
+  gameResults   GameResult[]
+  clipMatches   ClipMatch[]
+
   @@index([slug])
   @@index([deletedAt])
   @@map("organizations")
 }
 
 model User {
-  id            String    @id @default(cuid())
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
 
   email         String    @unique @db.VarChar(320)
   emailVerified DateTime? @map("email_verified")
   name          String?   @db.VarChar(255)
   image         String?   @db.VarChar(500)
+
+  // Role-based access (internal tool)
+  role        UserRole   @default(USER)
+  status      UserStatus @default(ACTIVE)
+  invitedAt   DateTime?  @map("invited_at")
+  invitedBy   String?    @map("invited_by")
+  lastLoginAt DateTime?  @map("last_login_at")
 
   // Preferences
   preferences Json @default("{}")
@@ -224,18 +292,19 @@ model User {
   // Relations
   accounts           Account[]
   sessions           Session[]
-  memberships        OrgMembership[] @relation("UserMemberships")
-  managedMemberships OrgMembership[] @relation("ManagedByUser")
-  invitesSent        Invite[]        @relation("InvitesSent")
+  memberships        OrgMembership[]   @relation("UserMemberships")
+  managedMemberships OrgMembership[]   @relation("ManagedByUser")
+  invitesSent        Invite[]          @relation("InvitesSent")
   queryDefinitions   QueryDefinition[]
   queryRuns          QueryRun[]
-  candidatesUpdated  Candidate[]     @relation("CandidateUpdatedBy")
+  candidatesUpdated  Candidate[]       @relation("CandidateUpdatedBy")
   logEntries         LogEntry[]
   auditEvents        AuditEvent[]
   exportJobs         ExportJob[]
 
   @@index([email])
   @@index([deletedAt])
+  @@index([role, status])
   @@map("users")
 }
 
@@ -308,14 +377,14 @@ model QueryDefinition {
   createdByUserId String @map("created_by_user_id")
 
   // Query definition
-  name           String  @db.VarChar(255)
-  description    String? @db.Text
-  sport          Sport
-  keywords       Json    @default("[]") // String[]
-  recencyDays    Int     @default(7) @map("recency_days")
-  channelIds     Json    @default("[]") @map("channel_ids") // String[]
-  maxResults     Int     @default(100) @map("max_results")
-  language       String  @default("en") @db.VarChar(10)
+  name        String  @db.VarChar(255)
+  description String? @db.Text
+  sport       Sport
+  keywords    Json    @default("[]") // String[]
+  recencyDays Int     @default(7) @map("recency_days")
+  channelIds  Json    @default("[]") @map("channel_ids") // String[]
+  maxResults  Int     @default(100) @map("max_results")
+  language    String  @default("en") @db.VarChar(10)
 
   // Sharing
   isShared Boolean @default(false) @map("is_shared")
@@ -348,8 +417,8 @@ model QueryRun {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  orgId             String @map("org_id")
-  queryDefinitionId String @map("query_definition_id")
+  orgId             String  @map("org_id")
+  queryDefinitionId String  @map("query_definition_id")
   triggeredByUserId String? @map("triggered_by_user_id")
 
   // Execution details
@@ -358,14 +427,14 @@ model QueryRun {
   jobId       String?         @map("job_id") @db.VarChar(100)
 
   // Timing
-  startedAt   DateTime? @map("started_at")
-  finishedAt  DateTime? @map("finished_at")
+  startedAt  DateTime? @map("started_at")
+  finishedAt DateTime? @map("finished_at")
 
   // Metrics
-  videosFetched       Int @default(0) @map("videos_fetched")
-  transcriptsFetched  Int @default(0) @map("transcripts_fetched")
-  videosProcessed     Int @default(0) @map("videos_processed")
-  candidatesProduced  Int @default(0) @map("candidates_produced")
+  videosFetched      Int @default(0) @map("videos_fetched")
+  transcriptsFetched Int @default(0) @map("transcripts_fetched")
+  videosProcessed    Int @default(0) @map("videos_processed")
+  candidatesProduced Int @default(0) @map("candidates_produced")
 
   // Progress tracking
   progress        Int?    @default(0)
@@ -397,14 +466,14 @@ model YouTubeVideo {
 
   orgId String @map("org_id")
 
-  youtubeVideoId  String    @map("youtube_video_id") @db.VarChar(20)
-  title           String    @db.VarChar(500)
-  description     String?   @db.Text
-  channelId       String    @map("channel_id") @db.VarChar(30)
-  channelTitle    String    @map("channel_title") @db.VarChar(255)
-  publishedAt     DateTime  @map("published_at")
-  durationSeconds Int?      @map("duration_seconds")
-  thumbnailUrl    String?   @map("thumbnail_url") @db.VarChar(500)
+  youtubeVideoId  String   @map("youtube_video_id") @db.VarChar(20)
+  title           String   @db.VarChar(500)
+  description     String?  @db.Text
+  channelId       String   @map("channel_id") @db.VarChar(30)
+  channelTitle    String   @map("channel_title") @db.VarChar(255)
+  publishedAt     DateTime @map("published_at")
+  durationSeconds Int?     @map("duration_seconds")
+  thumbnailUrl    String?  @map("thumbnail_url") @db.VarChar(500)
 
   // Engagement metrics
   viewCount    Int?     @map("view_count")
@@ -500,6 +569,7 @@ model Candidate {
   updatedByUser   User?             @relation("CandidateUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
   moments         CandidateMoment[]
   logEntries      LogEntry[]
+  clipMatches     ClipMatch[]
 
   @@index([queryRunId, rank])
   @@index([orgId, status])
@@ -565,8 +635,8 @@ model AuditEvent {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now()) @map("created_at")
 
-  orgId        String  @map("org_id")
-  actorUserId  String? @map("actor_user_id")
+  orgId       String  @map("org_id")
+  actorUserId String? @map("actor_user_id")
 
   eventType  AuditEventType @map("event_type")
   entityType String         @map("entity_type") @db.VarChar(100)
@@ -595,20 +665,20 @@ model ExportJob {
   orgId             String @map("org_id")
   requestedByUserId String @map("requested_by_user_id")
 
-  status       ExportStatus @default(PENDING)
-  format       ExportFormat @default(CSV)
-  exportType   String       @map("export_type") @db.VarChar(100)
+  status     ExportStatus @default(PENDING)
+  format     ExportFormat @default(CSV)
+  exportType String       @map("export_type") @db.VarChar(100)
 
   // What's being exported
-  filters       Json    @default("{}")
-  candidateIds  Json    @default("[]") @map("candidate_ids") // String[]
+  filters      Json @default("{}")
+  candidateIds Json @default("[]") @map("candidate_ids") // String[]
 
   // Results
-  recordCount   Int      @default(0) @map("record_count")
-  fileSizeBytes BigInt?  @map("file_size_bytes")
-  downloadUrl   String?  @map("download_url") @db.VarChar(1000)
-  fileName      String?  @map("file_name") @db.VarChar(255)
-  fileData      String?  @map("file_data") @db.Text // Base64 encoded
+  recordCount   Int       @default(0) @map("record_count")
+  fileSizeBytes BigInt?   @map("file_size_bytes")
+  downloadUrl   String?   @map("download_url") @db.VarChar(1000)
+  fileName      String?   @map("file_name") @db.VarChar(255)
+  fileData      String?   @map("file_data") @db.Text // Base64 encoded
   expiresAt     DateTime? @map("expires_at")
 
   // Timing
@@ -625,4 +695,227 @@ model ExportJob {
   @@index([orgId, createdAt(sort: Desc)])
   @@index([status])
   @@map("export_jobs")
+}
+
+// ============================================================================
+// SOURCE & NEWS INGESTION MODELS
+// ============================================================================
+
+// Source configuration for adapters
+model Source {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId String     @map("org_id")
+  name  String     @db.VarChar(255) // "ESPN NFL News", "DraftKings NBA Odds"
+  type  SourceType
+  sport Sport
+
+  // Configuration (varies by type)
+  config Json @default("{}") // { url, searchQuery, listId, etc. }
+
+  // Status tracking
+  status           SourceStatus @default(ACTIVE)
+  lastFetchAt      DateTime?    @map("last_fetch_at")
+  lastSuccessAt    DateTime?    @map("last_success_at")
+  lastErrorAt      DateTime?    @map("last_error_at")
+  lastErrorMessage String?      @map("last_error_message") @db.Text
+  fetchCount       Int          @default(0) @map("fetch_count")
+  errorCount       Int          @default(0) @map("error_count")
+
+  // Rate limiting
+  rateLimitResetAt DateTime? @map("rate_limit_reset_at")
+
+  // Scheduling (mirrors QueryDefinition scheduling pattern)
+  isScheduled      Boolean      @default(true) @map("is_scheduled")
+  scheduleType     ScheduleType @default(DAILY) @map("schedule_type")
+  scheduleCron     String?      @map("schedule_cron") @db.VarChar(100)
+  scheduleTimezone String       @default("America/New_York") @map("schedule_timezone") @db.VarChar(50)
+  refreshInterval  Int          @default(60) @map("refresh_interval") // Minutes between fetches (for HOURLY type)
+  nextFetchAt      DateTime?    @map("next_fetch_at")
+  lastScheduledAt  DateTime?    @map("last_scheduled_at")
+
+  // Relations
+  org       Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  newsItems NewsItem[]
+  fetchRuns SourceFetchRun[]
+
+  @@index([orgId, type])
+  @@index([sport, status])
+  @@index([isScheduled, nextFetchAt])
+  @@map("sources")
+}
+
+// Track each fetch attempt
+model SourceFetchRun {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sourceId String @map("source_id")
+
+  status       String    @db.VarChar(50) // QUEUED, RUNNING, SUCCEEDED, FAILED
+  triggeredBy  String    @default("SCHEDULED") @map("triggered_by") @db.VarChar(50) // MANUAL, SCHEDULED
+  startedAt    DateTime  @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
+  itemsFetched Int       @default(0) @map("items_fetched")
+  newItems     Int       @default(0) @map("new_items")
+
+  errorMessage String? @map("error_message") @db.Text
+
+  source Source @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+
+  @@index([sourceId, createdAt(sort: Desc)])
+  @@map("source_fetch_runs")
+}
+
+// News items from all sources
+model NewsItem {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId    String @map("org_id")
+  sourceId String @map("source_id")
+
+  // Content
+  externalId String       @map("external_id") @db.VarChar(500) // Original ID from source
+  type       NewsItemType
+  sport      Sport
+  headline   String       @db.VarChar(1000)
+  content    String?      @db.Text
+  url        String?      @db.VarChar(2000)
+  imageUrl   String?      @map("image_url") @db.VarChar(2000)
+
+  // Metadata
+  publishedAt DateTime @map("published_at")
+  author      String?  @db.VarChar(255)
+
+  // Entities (extracted)
+  teams   Json @default("[]") // ["Lakers", "Celtics"]
+  players Json @default("[]") // ["LeBron James"]
+  topics  Json @default("[]") // ["trade", "injury"]
+
+  // Importance scoring
+  importanceScore Float   @default(0) @map("importance_score")
+  scoreBreakdown  Json    @default("{}") @map("score_breakdown") // { recency: 0.3, engagement: 0.2, ... }
+  aiAnalysis      String? @map("ai_analysis") @db.Text // AI summary/analysis
+
+  // Status
+  isProcessed Boolean @default(false) @map("is_processed")
+  isPaired    Boolean @default(false) @map("is_paired")
+
+  // Relations
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  source      Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  clipMatches ClipMatch[]
+
+  @@unique([orgId, sourceId, externalId])
+  @@index([orgId, sport, publishedAt(sort: Desc)])
+  @@index([orgId, importanceScore(sort: Desc)])
+  @@index([isProcessed, isPaired])
+  @@map("news_items")
+}
+
+// Betting odds snapshots
+model OddsSnapshot {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  orgId    String @map("org_id")
+  sourceId String @map("source_id")
+
+  // Game identification
+  sport          Sport
+  homeTeam       String   @map("home_team") @db.VarChar(255)
+  awayTeam       String   @map("away_team") @db.VarChar(255)
+  gameDate       DateTime @map("game_date")
+  externalGameId String?  @map("external_game_id") @db.VarChar(255)
+
+  // Odds data
+  homeMoneyline Int?   @map("home_moneyline") // -150
+  awayMoneyline Int?   @map("away_moneyline") // +130
+  spread        Float? // -3.5
+  spreadJuice   Int?   @map("spread_juice") // -110
+  overUnder     Float? @map("over_under") // 224.5
+  overJuice     Int?   @map("over_juice")
+  underJuice    Int?   @map("under_juice")
+
+  // Line movement tracking
+  previousSpread    Float? @map("previous_spread")
+  previousOverUnder Float? @map("previous_over_under")
+  lineMovement      Json?  @map("line_movement") // History of changes
+
+  // Relations
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, sport, gameDate])
+  @@index([homeTeam, awayTeam, gameDate])
+  @@map("odds_snapshots")
+}
+
+// Game results
+model GameResult {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId    String  @map("org_id")
+  sourceId String? @map("source_id")
+
+  // Game identification
+  sport          Sport
+  homeTeam       String   @map("home_team") @db.VarChar(255)
+  awayTeam       String   @map("away_team") @db.VarChar(255)
+  gameDate       DateTime @map("game_date")
+  externalGameId String?  @map("external_game_id") @db.VarChar(255)
+
+  // Scores
+  homeScore Int?    @map("home_score")
+  awayScore Int?    @map("away_score")
+  status    String? @db.VarChar(50) // FINAL, IN_PROGRESS, SCHEDULED
+
+  // Additional stats
+  statsJson Json? @map("stats_json") // Sport-specific stats
+
+  // Betting results
+  spreadWinner String? @map("spread_winner") @db.VarChar(50) // HOME, AWAY, PUSH
+  totalResult  String? @map("total_result") @db.VarChar(50) // OVER, UNDER, PUSH
+
+  // Relations
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, homeTeam, awayTeam, gameDate])
+  @@index([orgId, sport, gameDate])
+  @@map("game_results")
+}
+
+// Clip-to-news matching
+model ClipMatch {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId       String  @map("org_id")
+  newsItemId  String  @map("news_item_id")
+  candidateId String? @map("candidate_id") // Link to existing Candidate model
+
+  // Match details
+  status      ClipMatchStatus @default(PENDING)
+  matchScore  Float           @default(0) @map("match_score")
+  matchReason String?         @map("match_reason") @db.Text
+
+  // Optional: direct YouTube video link (if not using Candidate)
+  youtubeVideoId String? @map("youtube_video_id") @db.VarChar(20)
+  startSeconds   Int?    @map("start_seconds")
+  endSeconds     Int?    @map("end_seconds")
+
+  // Relations
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  newsItem  NewsItem     @relation(fields: [newsItemId], references: [id], onDelete: Cascade)
+  candidate Candidate?   @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@unique([newsItemId, candidateId])
+  @@index([orgId, status])
+  @@map("clip_matches")
 }

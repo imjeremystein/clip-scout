@@ -61,8 +61,8 @@ export async function fetchYouTubeTranscript(videoId: string): Promise<Transcrip
     // Fetch the video page
     const pageHtml = await httpsGet(`https://www.youtube.com/watch?v=${videoId}`);
 
-    // Extract player response JSON
-    const playerResponseMatch = pageHtml.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});/s);
+    // Extract player response JSON (using RegExp for 's' flag compatibility)
+    const playerResponseMatch = pageHtml.match(new RegExp("var ytInitialPlayerResponse\\s*=\\s*(\\{.+?\\});", "s"));
     if (!playerResponseMatch) {
       console.log(`[Transcript] No player response found for ${videoId}`);
       return null;

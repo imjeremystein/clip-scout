@@ -9,6 +9,10 @@ export const QUEUE_NAMES = {
   VIDEO_ANALYZE: "clipscout-video-analyze",
   SCHEDULER: "clipscout-scheduler",
   EXPORT: "clipscout-export",
+  // News ingestion queues
+  SOURCE_FETCH: "clipscout-source-fetch",
+  IMPORTANCE_SCORE: "clipscout-importance-score",
+  CLIP_PAIR: "clipscout-clip-pair",
 } as const;
 
 // Default queue options
@@ -37,6 +41,11 @@ export const transcriptFetchQueue = new Queue(QUEUE_NAMES.TRANSCRIPT_FETCH, defa
 export const videoAnalyzeQueue = new Queue(QUEUE_NAMES.VIDEO_ANALYZE, defaultQueueOptions);
 export const schedulerQueue = new Queue(QUEUE_NAMES.SCHEDULER, defaultQueueOptions);
 export const exportQueue = new Queue(QUEUE_NAMES.EXPORT, defaultQueueOptions);
+
+// News ingestion queues
+export const sourceFetchQueue = new Queue(QUEUE_NAMES.SOURCE_FETCH, defaultQueueOptions);
+export const importanceScoreQueue = new Queue(QUEUE_NAMES.IMPORTANCE_SCORE, defaultQueueOptions);
+export const clipPairQueue = new Queue(QUEUE_NAMES.CLIP_PAIR, defaultQueueOptions);
 
 // Job data types
 export interface QueryRunJobData {
@@ -77,6 +86,24 @@ export interface ExportJobData {
   orgId: string;
   candidateIds: string[];
   format: "CSV" | "JSON";
+}
+
+// News ingestion job data types
+export interface SourceFetchJobData {
+  sourceId: string;
+  fetchRunId: string;
+  orgId: string;
+  triggeredBy: "MANUAL" | "SCHEDULED";
+}
+
+export interface ImportanceScoreJobData {
+  newsItemId: string;
+  orgId: string;
+}
+
+export interface ClipPairJobData {
+  newsItemId: string;
+  orgId: string;
 }
 
 // Helper to create a worker with default settings
