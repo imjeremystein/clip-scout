@@ -1,0 +1,628 @@
+// Clip Scout - Multi-tenant YouTube Clip Discovery Platform
+// Prisma Schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch"]
+  binaryTargets   = ["native", "darwin-arm64"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum OrgRole {
+  MANAGER
+  MEMBER
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  DISABLED
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
+enum Sport {
+  NFL
+  MLB
+  NBA
+  NHL
+  SOCCER
+  BOXING
+  SPORTS_BETTING
+}
+
+enum QueryRunStatus {
+  QUEUED
+  RUNNING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+enum QueryRunTrigger {
+  MANUAL
+  SCHEDULED
+  SYSTEM
+}
+
+enum TranscriptSource {
+  YOUTUBE_API
+  AUTOGEN
+  THIRD_PARTY
+}
+
+enum CandidateStatus {
+  NEW
+  SHORTLISTED
+  DISMISSED
+  EXPORTED
+}
+
+enum MomentType {
+  HIGHLIGHT
+  QUOTE
+  ANALYSIS
+  CONTROVERSY
+  BREAKING_NEWS
+  TRADE_RUMOR
+  INJURY_UPDATE
+  STAT
+  CUSTOM
+}
+
+enum AuditEventType {
+  ORG_CREATED
+  ORG_UPDATED
+  MEMBER_INVITED
+  MEMBER_JOINED
+  MEMBER_REMOVED
+  MEMBER_ROLE_CHANGED
+  QUERY_CREATED
+  QUERY_UPDATED
+  QUERY_DELETED
+  QUERY_RUN_STARTED
+  QUERY_RUN_COMPLETED
+  CANDIDATE_STATUS_CHANGED
+  EXPORT_STARTED
+  EXPORT_COMPLETED
+  LOG_ENTRY_CREATED
+  LOG_ENTRY_DELETED
+}
+
+enum ExportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  EXPIRED
+}
+
+enum ExportFormat {
+  CSV
+  JSON
+}
+
+enum ScheduleType {
+  MANUAL
+  DAILY
+  WEEKDAYS
+  WEEKLY
+  CUSTOM
+}
+
+// ============================================================================
+// AUTH MODELS (NextAuth compatible)
+// ============================================================================
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================================
+// CORE TENANT & USER MODELS
+// ============================================================================
+
+model Organization {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  name     String @db.VarChar(255)
+  slug     String @unique @db.VarChar(100)
+  timezone String @default("America/New_York") @db.VarChar(50)
+  plan     String @default("free") @db.VarChar(50)
+
+  // YouTube API configuration
+  youtubeApiKeyEncrypted String? @map("youtube_api_key_encrypted") @db.Text
+  youtubeQuotaUsed       Int     @default(0) @map("youtube_quota_used")
+  youtubeQuotaResetAt    DateTime @default(now()) @map("youtube_quota_reset_at")
+
+  // Settings
+  settings Json @default("{}")
+
+  // Relations
+  memberships      OrgMembership[]
+  invites          Invite[]
+  queryDefinitions QueryDefinition[]
+  queryRuns        QueryRun[]
+  youtubeVideos    YouTubeVideo[]
+  transcripts      Transcript[]
+  candidates       Candidate[]
+  logEntries       LogEntry[]
+  auditEvents      AuditEvent[]
+  exportJobs       ExportJob[]
+
+  @@index([slug])
+  @@index([deletedAt])
+  @@map("organizations")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  email         String    @unique @db.VarChar(320)
+  emailVerified DateTime? @map("email_verified")
+  name          String?   @db.VarChar(255)
+  image         String?   @db.VarChar(500)
+
+  // Preferences
+  preferences Json @default("{}")
+
+  // Relations
+  accounts           Account[]
+  sessions           Session[]
+  memberships        OrgMembership[] @relation("UserMemberships")
+  managedMemberships OrgMembership[] @relation("ManagedByUser")
+  invitesSent        Invite[]        @relation("InvitesSent")
+  queryDefinitions   QueryDefinition[]
+  queryRuns          QueryRun[]
+  candidatesUpdated  Candidate[]     @relation("CandidateUpdatedBy")
+  logEntries         LogEntry[]
+  auditEvents        AuditEvent[]
+  exportJobs         ExportJob[]
+
+  @@index([email])
+  @@index([deletedAt])
+  @@map("users")
+}
+
+model OrgMembership {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId  String @map("org_id")
+  userId String @map("user_id")
+
+  role   OrgRole          @default(MEMBER)
+  status MembershipStatus @default(ACTIVE)
+
+  // Manager/subordinate relationship
+  managerId String? @map("manager_id")
+
+  // Relations
+  org     Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user    User         @relation("UserMemberships", fields: [userId], references: [id], onDelete: Cascade)
+  manager User?        @relation("ManagedByUser", fields: [managerId], references: [id], onDelete: SetNull)
+
+  @@unique([orgId, userId])
+  @@index([orgId])
+  @@index([userId])
+  @@index([orgId, role])
+  @@map("org_memberships")
+}
+
+model Invite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId String @map("org_id")
+  email String @db.VarChar(320)
+  token String @unique @default(cuid()) @db.VarChar(100)
+
+  role      OrgRole      @default(MEMBER)
+  status    InviteStatus @default(PENDING)
+  expiresAt DateTime     @map("expires_at")
+  message   String?      @db.VarChar(500)
+
+  invitedByUserId String @map("invited_by_user_id")
+
+  // Relations
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedByUser User         @relation("InvitesSent", fields: [invitedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([email, orgId])
+  @@index([orgId])
+  @@index([email])
+  @@index([token])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("invites")
+}
+
+// ============================================================================
+// QUERY MODELS
+// ============================================================================
+
+model QueryDefinition {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  orgId           String @map("org_id")
+  createdByUserId String @map("created_by_user_id")
+
+  // Query definition
+  name           String  @db.VarChar(255)
+  description    String? @db.Text
+  sport          Sport
+  keywords       Json    @default("[]") // String[]
+  recencyDays    Int     @default(7) @map("recency_days")
+  channelIds     Json    @default("[]") @map("channel_ids") // String[]
+  maxResults     Int     @default(100) @map("max_results")
+  language       String  @default("en") @db.VarChar(10)
+
+  // Sharing
+  isShared Boolean @default(false) @map("is_shared")
+  isActive Boolean @default(true) @map("is_active")
+
+  // Scheduling
+  isScheduled      Boolean      @default(false) @map("is_scheduled")
+  scheduleType     ScheduleType @default(MANUAL) @map("schedule_type")
+  scheduleCron     String?      @map("schedule_cron") @db.VarChar(100)
+  scheduleTimezone String       @default("America/New_York") @map("schedule_timezone") @db.VarChar(50)
+  nextRunAt        DateTime?    @map("next_run_at")
+  lastRunAt        DateTime?    @map("last_run_at")
+
+  // Relations
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdByUser User         @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  queryRuns     QueryRun[]
+  candidates    Candidate[]
+
+  @@index([orgId])
+  @@index([orgId, sport])
+  @@index([orgId, createdByUserId])
+  @@index([isScheduled, nextRunAt])
+  @@index([deletedAt])
+  @@map("query_definitions")
+}
+
+model QueryRun {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId             String @map("org_id")
+  queryDefinitionId String @map("query_definition_id")
+  triggeredByUserId String? @map("triggered_by_user_id")
+
+  // Execution details
+  status      QueryRunStatus  @default(QUEUED)
+  triggeredBy QueryRunTrigger @default(MANUAL) @map("triggered_by")
+  jobId       String?         @map("job_id") @db.VarChar(100)
+
+  // Timing
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+
+  // Metrics
+  videosFetched       Int @default(0) @map("videos_fetched")
+  transcriptsFetched  Int @default(0) @map("transcripts_fetched")
+  videosProcessed     Int @default(0) @map("videos_processed")
+  candidatesProduced  Int @default(0) @map("candidates_produced")
+
+  // Progress tracking
+  progress        Int?    @default(0)
+  progressMessage String? @map("progress_message") @db.VarChar(500)
+
+  // Error handling
+  errorMessage String? @map("error_message") @db.Text
+
+  // Relations
+  org             Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  queryDefinition QueryDefinition @relation(fields: [queryDefinitionId], references: [id], onDelete: Cascade)
+  triggeredByUser User?           @relation(fields: [triggeredByUserId], references: [id], onDelete: SetNull)
+  candidates      Candidate[]
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([orgId, status])
+  @@index([queryDefinitionId])
+  @@map("query_runs")
+}
+
+// ============================================================================
+// VIDEO & TRANSCRIPT MODELS
+// ============================================================================
+
+model YouTubeVideo {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId String @map("org_id")
+
+  youtubeVideoId  String    @map("youtube_video_id") @db.VarChar(20)
+  title           String    @db.VarChar(500)
+  description     String?   @db.Text
+  channelId       String    @map("channel_id") @db.VarChar(30)
+  channelTitle    String    @map("channel_title") @db.VarChar(255)
+  publishedAt     DateTime  @map("published_at")
+  durationSeconds Int?      @map("duration_seconds")
+  thumbnailUrl    String?   @map("thumbnail_url") @db.VarChar(500)
+
+  // Engagement metrics
+  viewCount    Int?     @map("view_count")
+  likeCount    Int?     @map("like_count")
+  commentCount Int?     @map("comment_count")
+  hasCaptions  Boolean? @map("has_captions")
+
+  // Relations
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  transcripts Transcript[]
+  candidates  Candidate[]
+
+  @@unique([orgId, youtubeVideoId])
+  @@index([orgId])
+  @@index([orgId, publishedAt(sort: Desc)])
+  @@map("youtube_videos")
+}
+
+model Transcript {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId   String @map("org_id")
+  videoId String @map("video_id")
+
+  sourceType TranscriptSource @map("source_type")
+  language   String           @default("en") @db.VarChar(10)
+  fullText   String           @map("full_text") @db.Text
+
+  fetchedAt DateTime @default(now()) @map("fetched_at")
+
+  // Relations
+  org      Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  video    YouTubeVideo        @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  segments TranscriptSegment[]
+
+  @@index([orgId, videoId])
+  @@map("transcripts")
+}
+
+model TranscriptSegment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  orgId        String @map("org_id")
+  transcriptId String @map("transcript_id")
+
+  startSeconds Int    @map("start_seconds")
+  endSeconds   Int    @map("end_seconds")
+  text         String @db.Text
+
+  // Relations
+  transcript Transcript @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+
+  @@index([transcriptId, startSeconds])
+  @@map("transcript_segments")
+}
+
+// ============================================================================
+// CANDIDATE & RESULTS MODELS
+// ============================================================================
+
+model Candidate {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  orgId             String  @map("org_id")
+  queryRunId        String  @map("query_run_id")
+  queryDefinitionId String  @map("query_definition_id")
+  youtubeVideoId    String  @map("youtube_video_id")
+  updatedByUserId   String? @map("updated_by_user_id")
+
+  // Scoring
+  relevanceScore Float @default(0) @map("relevance_score")
+  rank           Int?
+
+  // Status
+  status CandidateStatus @default(NEW)
+
+  // AI Analysis
+  aiSummary    String? @map("ai_summary") @db.Text
+  whyRelevant  String? @map("why_relevant") @db.Text
+  entitiesJson Json    @default("{}") @map("entities_json")
+
+  // Relations
+  org             Organization      @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  queryRun        QueryRun          @relation(fields: [queryRunId], references: [id], onDelete: Cascade)
+  queryDefinition QueryDefinition   @relation(fields: [queryDefinitionId], references: [id], onDelete: Cascade)
+  video           YouTubeVideo      @relation(fields: [youtubeVideoId], references: [id], onDelete: Cascade)
+  updatedByUser   User?             @relation("CandidateUpdatedBy", fields: [updatedByUserId], references: [id], onDelete: SetNull)
+  moments         CandidateMoment[]
+  logEntries      LogEntry[]
+
+  @@index([queryRunId, rank])
+  @@index([orgId, status])
+  @@index([queryDefinitionId])
+  @@index([deletedAt])
+  @@map("candidates")
+}
+
+model CandidateMoment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId       String @map("org_id")
+  candidateId String @map("candidate_id")
+
+  label           String     @db.VarChar(255)
+  type            MomentType @default(HIGHLIGHT)
+  startSeconds    Int        @map("start_seconds")
+  endSeconds      Int        @map("end_seconds")
+  confidence      Float      @default(0)
+  supportingQuote String?    @map("supporting_quote") @db.Text
+
+  // Relations
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  @@index([candidateId, startSeconds])
+  @@map("candidate_moments")
+}
+
+// ============================================================================
+// LOGGING & AUDIT MODELS
+// ============================================================================
+
+model LogEntry {
+  id        String    @id @default(cuid())
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  orgId           String  @map("org_id")
+  createdByUserId String  @map("created_by_user_id")
+  candidateId     String? @map("candidate_id")
+
+  sport      Sport?
+  title      String  @db.VarChar(255)
+  note       String  @db.Text
+  youtubeUrl String? @map("youtube_url") @db.VarChar(500)
+  shared     Boolean @default(false)
+
+  // Relations
+  org           Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdByUser User         @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  candidate     Candidate?   @relation(fields: [candidateId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([candidateId])
+  @@index([deletedAt])
+  @@map("log_entries")
+}
+
+model AuditEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+
+  orgId        String  @map("org_id")
+  actorUserId  String? @map("actor_user_id")
+
+  eventType  AuditEventType @map("event_type")
+  entityType String         @map("entity_type") @db.VarChar(100)
+  entityId   String         @map("entity_id") @db.VarChar(100)
+  action     String         @db.VarChar(255)
+  meta       Json           @default("{}")
+
+  // Relations
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  actorUser User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@map("audit_events")
+}
+
+// ============================================================================
+// EXPORT MODEL
+// ============================================================================
+
+model ExportJob {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orgId             String @map("org_id")
+  requestedByUserId String @map("requested_by_user_id")
+
+  status       ExportStatus @default(PENDING)
+  format       ExportFormat @default(CSV)
+  exportType   String       @map("export_type") @db.VarChar(100)
+
+  // What's being exported
+  filters       Json    @default("{}")
+  candidateIds  Json    @default("[]") @map("candidate_ids") // String[]
+
+  // Results
+  recordCount   Int      @default(0) @map("record_count")
+  fileSizeBytes BigInt?  @map("file_size_bytes")
+  downloadUrl   String?  @map("download_url") @db.VarChar(1000)
+  fileName      String?  @map("file_name") @db.VarChar(255)
+  fileData      String?  @map("file_data") @db.Text // Base64 encoded
+  expiresAt     DateTime? @map("expires_at")
+
+  // Timing
+  startedAt   DateTime? @map("started_at")
+  completedAt DateTime? @map("completed_at")
+
+  // Error handling
+  errorMessage String? @map("error_message") @db.Text
+
+  // Relations
+  org             Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  requestedByUser User         @relation(fields: [requestedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([orgId, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("export_jobs")
+}
