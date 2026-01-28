@@ -249,6 +249,19 @@ export function SourceForm({ mode, initialData }: SourceFormProps) {
         return (
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label htmlFor="sgApiToken">API Token</Label>
+              <Input
+                id="sgApiToken"
+                type="password"
+                placeholder="Bearer token (or use SPORTSGRID_API_TOKEN env var)"
+                value={(config.apiToken as string) || ""}
+                onChange={(e) => handleConfigChange("apiToken", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty to use SPORTSGRID_API_TOKEN environment variable
+              </p>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor="sgSport">Sport Override (optional)</Label>
               <Select
                 value={(config.sport as string) || ""}
@@ -258,10 +271,12 @@ export function SourceForm({ mode, initialData }: SourceFormProps) {
                   <SelectValue placeholder="Use source sport" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="nfl">NFL Football</SelectItem>
-                  <SelectItem value="nba">NBA Basketball</SelectItem>
-                  <SelectItem value="mlb">MLB Baseball</SelectItem>
-                  <SelectItem value="nhl">NHL Hockey</SelectItem>
+                  <SelectItem value="NFL">NFL Football</SelectItem>
+                  <SelectItem value="NBA">NBA Basketball</SelectItem>
+                  <SelectItem value="MLB">MLB Baseball</SelectItem>
+                  <SelectItem value="NHL">NHL Hockey</SelectItem>
+                  <SelectItem value="CBB">College Basketball</SelectItem>
+                  <SelectItem value="CFB">College Football</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">

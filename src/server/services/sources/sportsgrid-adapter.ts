@@ -9,52 +9,18 @@ import type {
 } from "./types";
 import { BaseAdapter, type OddsAdapter } from "./base-adapter";
 
-// SportsGrid API endpoint
-const SPORTSGRID_API_URL = "https://web.sportsgrid.com/api/web/v1/getSingleSportGamesData";
+// SportsGrid authenticated API endpoint
+const SPORTSGRID_API_URL = "https://app.sportsgrid.com/api/v1/getSingleSportGamesData";
 
-// Team abbreviation to full name mappings
-const NFL_TEAMS: Record<string, string> = {
-  'ARI': 'Arizona Cardinals', 'ATL': 'Atlanta Falcons', 'BAL': 'Baltimore Ravens',
-  'BUF': 'Buffalo Bills', 'CAR': 'Carolina Panthers', 'CHI': 'Chicago Bears',
-  'CIN': 'Cincinnati Bengals', 'CLE': 'Cleveland Browns', 'DAL': 'Dallas Cowboys',
-  'DEN': 'Denver Broncos', 'DET': 'Detroit Lions', 'GB': 'Green Bay Packers',
-  'HOU': 'Houston Texans', 'IND': 'Indianapolis Colts', 'JAX': 'Jacksonville Jaguars',
-  'KC': 'Kansas City Chiefs', 'LV': 'Las Vegas Raiders', 'LAC': 'Los Angeles Chargers',
-  'LAR': 'Los Angeles Rams', 'MIA': 'Miami Dolphins', 'MIN': 'Minnesota Vikings',
-  'NE': 'New England Patriots', 'NO': 'New Orleans Saints', 'NYG': 'New York Giants',
-  'NYJ': 'New York Jets', 'PHI': 'Philadelphia Eagles', 'PIT': 'Pittsburgh Steelers',
-  'SF': 'San Francisco 49ers', 'SEA': 'Seattle Seahawks', 'TB': 'Tampa Bay Buccaneers',
-  'TEN': 'Tennessee Titans', 'WAS': 'Washington Commanders'
-};
-
-const NBA_TEAMS: Record<string, string> = {
-  'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
-  'CHA': 'Charlotte Hornets', 'CHI': 'Chicago Bulls', 'CLE': 'Cleveland Cavaliers',
-  'DAL': 'Dallas Mavericks', 'DEN': 'Denver Nuggets', 'DET': 'Detroit Pistons',
-  'GSW': 'Golden State Warriors', 'HOU': 'Houston Rockets', 'IND': 'Indiana Pacers',
-  'LAC': 'Los Angeles Clippers', 'LAL': 'Los Angeles Lakers', 'MEM': 'Memphis Grizzlies',
-  'MIA': 'Miami Heat', 'MIL': 'Milwaukee Bucks', 'MIN': 'Minnesota Timberwolves',
-  'NOP': 'New Orleans Pelicans', 'NYK': 'New York Knicks', 'OKC': 'Oklahoma City Thunder',
-  'ORL': 'Orlando Magic', 'PHI': 'Philadelphia 76ers', 'PHX': 'Phoenix Suns',
-  'POR': 'Portland Trail Blazers', 'SAC': 'Sacramento Kings', 'SAS': 'San Antonio Spurs',
-  'TOR': 'Toronto Raptors', 'UTA': 'Utah Jazz', 'WAS': 'Washington Wizards'
-};
-
-function getFullTeamName(abbrev: string, sport: Sport): string {
-  if (sport === 'NFL') return NFL_TEAMS[abbrev] || abbrev;
-  if (sport === 'NBA') return NBA_TEAMS[abbrev] || abbrev;
-  return abbrev;
-}
-
-// Sport to SportsGrid sport name mapping (lowercase)
+// Sport to SportsGrid sport name mapping (uppercase for new API)
 const SPORT_MAP: Record<Sport, string> = {
-  NFL: "nfl",
-  NBA: "nba",
-  MLB: "mlb",
-  NHL: "nhl",
-  SOCCER: "soccer",
-  BOXING: "boxing",
-  SPORTS_BETTING: "nfl", // Default to NFL
+  NFL: "NFL",
+  NBA: "NBA",
+  MLB: "MLB",
+  NHL: "NHL",
+  SOCCER: "Soccer",
+  BOXING: "Boxing",
+  SPORTS_BETTING: "NFL", // Default to NFL
 };
 
 // Self-imposed rate limiting: 10 requests per minute, 6s between requests
@@ -66,12 +32,13 @@ const RATE_LIMIT_WINDOW_MS = 60000;
  * SportsGrid config stored in Source.config JSON field.
  */
 export interface SportsGridConfig {
-  sport?: string; // Optional sport override (lowercase)
+  sport?: string; // Optional sport override (NBA, NFL, MLB, NHL, CBB, CFB)
+  apiToken?: string; // Bearer token for authenticated API
 }
 
 /**
  * SportsGrid Adapter
- * Fetches betting odds from SportsGrid's public API.
+ * Fetches betting odds from SportsGrid's authenticated API.
  */
 export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
   readonly type = "SPORTSGRID_API" as const;
@@ -108,13 +75,13 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
     const config = this.parseConfig<SportsGridConfig>(source);
 
     // Get sport name for API (use config override or map from source.sport)
-    const sportName = config.sport || SPORT_MAP[source.sport] || "nfl";
+    const sportName = config.sport || SPORT_MAP[source.sport] || "NFL";
 
     // Respect rate limiting
     await this.waitForRateLimit();
 
     try {
-      const games = await this.fetchGames(sportName);
+      const games = await this.fetchGames(sportName, config);
 
       const odds: RawOddsData[] = [];
 
@@ -147,7 +114,12 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
 
     // Optional: sport override
     if (cfg.sport !== undefined && typeof cfg.sport !== "string") {
-      return this.validationError(["sport must be a string if provided (e.g., 'nfl', 'nba', 'mlb')"]);
+      return this.validationError(["sport must be a string if provided (e.g., 'NFL', 'NBA', 'MLB')"]);
+    }
+
+    // Optional: API token (will fall back to env var)
+    if (cfg.apiToken !== undefined && typeof cfg.apiToken !== "string") {
+      return this.validationError(["apiToken must be a string if provided"]);
     }
 
     // Add info about rate limiting
@@ -158,8 +130,8 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
 
   async testConnection(config: SportsGridConfig): Promise<boolean> {
     try {
-      const sport = config.sport || "nfl";
-      const games = await this.fetchGames(sport);
+      const sport = config.sport || "NFL";
+      const games = await this.fetchGames(sport, config);
       return Array.isArray(games);
     } catch {
       return false;
@@ -167,17 +139,29 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
   }
 
   /**
-   * Fetch games from SportsGrid API.
+   * Fetch games from SportsGrid authenticated API.
    */
-  private async fetchGames(sport: string): Promise<SportsGridGame[]> {
+  private async fetchGames(sport: string, config: SportsGridConfig): Promise<SportsGridGame[]> {
+    const token = config.apiToken || process.env.SPORTSGRID_API_TOKEN;
+
+    if (!token) {
+      throw new Error("SportsGrid API token is required. Set SPORTSGRID_API_TOKEN env var or provide apiToken in config.");
+    }
+
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
     const response = await fetch(SPORTSGRID_API_URL, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "User-Agent": process.env.SCRAPER_USER_AGENT || "ClipScout/1.0",
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Bearer ${token}`,
       },
-      body: JSON.stringify({ sport: sport.toLowerCase() }),
+      body: new URLSearchParams({
+        date: today,
+        sport: sport.toUpperCase(),
+        viewType: "game_by_date",
+      }),
       signal: AbortSignal.timeout(30000),
     });
 
@@ -190,73 +174,44 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
 
     const data = await response.json();
 
-    // Games are in data.featured_games.data array (or featured_games.data)
-    return data?.data?.featured_games?.data || data?.featured_games?.data || [];
+    // Games are in data.games array for the authenticated API
+    return data?.data?.games || [];
   }
 
   /**
    * Parse a SportsGrid game into odds data.
    *
-   * Field mapping:
-   * - home_name -> homeTeam
-   * - away_name -> awayTeam
-   * - scheduled_raw -> gameDate
+   * New API field mapping:
    * - key -> externalGameId
-   * - home_spread_point ("+4.5") -> spread (4.5)
-   * - home_ml_point ("+203") -> homeMoneyline (203)
-   * - away_ml_point ("-213") -> awayMoneyline (-213)
-   * - home_total_point ("U 45.5") -> overUnder (45.5)
+   * - home_full_name -> homeTeam
+   * - away_full_name -> awayTeam
+   * - scheduled -> gameDate
+   * - home_spread_point ("-3.5") -> spread (-3.5)
+   * - home_ml_point ("-155") -> homeMoneyline (-155)
+   * - away_ml_point ("+125") -> awayMoneyline (125)
+   * - home_total_point ("U 235.5") -> overUnder (235.5)
+   * - home_logo, away_logo -> stored in rawData
+   * - home_score, away_score -> stored in rawData (season records)
    */
-  private parseGame(game: SportsGridGame, sport: Sport): RawOddsData | null {
-    if (!game.home_name || !game.away_name) {
+  private parseGame(game: SportsGridGame, _sport: Sport): RawOddsData | null {
+    if (!game.home_full_name || !game.away_full_name) {
       return null;
     }
 
-    // Convert abbreviations to full team names
-    const homeTeam = getFullTeamName(game.home_name, sport);
-    const awayTeam = getFullTeamName(game.away_name, sport);
-
     // Parse spread from home_spread_point (e.g., "+4.5" or "-3.5")
-    let spread: number | undefined;
-    if (game.home_spread_point) {
-      const spreadMatch = game.home_spread_point.match(/([+-]?\d+\.?\d*)/);
-      if (spreadMatch) {
-        spread = parseFloat(spreadMatch[1]);
-      }
-    }
+    const spread = this.parseNumber(game.home_spread_point);
 
-    // Parse home moneyline from home_ml_point (e.g., "+203" or "-150")
-    let homeMoneyline: number | undefined;
-    if (game.home_ml_point) {
-      const mlMatch = game.home_ml_point.match(/([+-]?\d+)/);
-      if (mlMatch) {
-        homeMoneyline = parseInt(mlMatch[1], 10);
-      }
-    }
+    // Parse moneylines (e.g., "-155" or "+125")
+    const homeMoneyline = this.parseNumber(game.home_ml_point);
+    const awayMoneyline = this.parseNumber(game.away_ml_point);
 
-    // Parse away moneyline from away_ml_point (e.g., "-213" or "+180")
-    let awayMoneyline: number | undefined;
-    if (game.away_ml_point) {
-      const mlMatch = game.away_ml_point.match(/([+-]?\d+)/);
-      if (mlMatch) {
-        awayMoneyline = parseInt(mlMatch[1], 10);
-      }
-    }
-
-    // Parse over/under from home_total_point (e.g., "U 45.5" or "O 220.5")
-    // The total is the same for both over and under, just extract the number
-    let overUnder: number | undefined;
-    if (game.home_total_point) {
-      const ouMatch = game.home_total_point.match(/(\d+\.?\d*)/);
-      if (ouMatch) {
-        overUnder = parseFloat(ouMatch[1]);
-      }
-    }
+    // Parse over/under from home_total_point (e.g., "U 235.5" -> 235.5)
+    const overUnder = this.parseOverUnder(game.home_total_point);
 
     // Parse game date
     let gameDate = new Date();
-    if (game.scheduled_raw) {
-      const parsed = new Date(game.scheduled_raw);
+    if (game.scheduled) {
+      const parsed = new Date(game.scheduled);
       if (!isNaN(parsed.getTime())) {
         gameDate = parsed;
       }
@@ -264,8 +219,8 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
 
     return {
       externalGameId: game.key || undefined,
-      homeTeam,
-      awayTeam,
+      homeTeam: game.home_full_name,
+      awayTeam: game.away_full_name,
       gameDate,
       homeMoneyline,
       awayMoneyline,
@@ -274,14 +229,44 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
       overUnder,
       overJuice: -110, // Standard juice if not provided
       underJuice: -110, // Standard juice if not provided
-      rawData: game,
+      rawData: {
+        ...game,
+        homeLogo: game.home_logo,
+        awayLogo: game.away_logo,
+        homeRecord: game.home_score,
+        awayRecord: game.away_score,
+      },
     };
+  }
+
+  /**
+   * Parse a number from a string like "+4.5", "-3.5", "-155", etc.
+   */
+  private parseNumber(value: string | undefined): number | undefined {
+    if (!value) return undefined;
+    const match = value.match(/([+-]?\d+\.?\d*)/);
+    if (match) {
+      return parseFloat(match[1]);
+    }
+    return undefined;
+  }
+
+  /**
+   * Parse over/under from a string like "U 235.5" or "O 220.5"
+   */
+  private parseOverUnder(value: string | undefined): number | undefined {
+    if (!value) return undefined;
+    const match = value.match(/(\d+\.?\d*)/);
+    if (match) {
+      return parseFloat(match[1]);
+    }
+    return undefined;
   }
 
   /**
    * Convert odds data to a news item.
    */
-  private oddsToNewsItem(odds: RawOddsData, sport: Sport): RawNewsItem {
+  private oddsToNewsItem(odds: RawOddsData, _sport: Sport): RawNewsItem {
     const parts: string[] = [];
 
     if (odds.spread !== undefined) {
@@ -362,18 +347,24 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
   }
 }
 
-// Types for SportsGrid API responses
+// Types for SportsGrid API responses (authenticated API)
 interface SportsGridGame {
   key?: string;
-  home_name?: string;
-  away_name?: string;
-  scheduled_raw?: string;
-  home_spread_point?: string; // e.g., "+4.5"
-  away_spread_point?: string; // e.g., "-4.5"
-  home_ml_point?: string; // e.g., "+203"
-  away_ml_point?: string; // e.g., "-213"
-  home_total_point?: string; // e.g., "U 45.5"
-  away_total_point?: string; // e.g., "O 45.5"
+  home_full_name?: string;
+  away_full_name?: string;
+  home_name?: string; // abbreviation (for fallback)
+  away_name?: string; // abbreviation (for fallback)
+  scheduled?: string;
+  home_spread_point?: string; // e.g., "-3.5"
+  away_spread_point?: string; // e.g., "+3.5"
+  home_ml_point?: string; // e.g., "-155"
+  away_ml_point?: string; // e.g., "+125"
+  home_total_point?: string; // e.g., "U 235.5"
+  away_total_point?: string; // e.g., "O 235.5"
+  home_logo?: string;
+  away_logo?: string;
+  home_score?: string; // Season record (e.g., "25-15")
+  away_score?: string; // Season record (e.g., "30-10")
 }
 
 // Export singleton instance

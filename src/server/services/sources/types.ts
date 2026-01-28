@@ -43,7 +43,8 @@ export interface WebsiteScraperConfig {
 }
 
 export interface SportsGridConfig {
-  sport?: string; // Optional sport override (lowercase: "nfl", "nba", "mlb", etc.)
+  sport?: string; // Optional sport override (NBA, NFL, MLB, NHL, CBB, CFB)
+  apiToken?: string; // Bearer token for authenticated API
 }
 
 export interface EspnConfig {
