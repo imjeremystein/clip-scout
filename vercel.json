@@ -1,12 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/cron/scheduler",
-      "schedule": "* * * * *"
-    },
-    {
       "path": "/api/cron/source-fetch",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 */4 * * *"
     }
   ]
 }
