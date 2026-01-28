@@ -2,10 +2,10 @@ import OpenAI from "openai";
 import redis from "./redis";
 import crypto from "crypto";
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Initialize OpenAI client only if API key is present
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
 // Embedding model configuration
 const EMBEDDING_MODEL = "text-embedding-3-small";
@@ -22,6 +22,10 @@ function getEmbeddingCacheKey(text: string): string {
  * Get embedding for a single text
  */
 export async function getEmbedding(text: string): Promise<number[]> {
+  if (!openai) {
+    throw new Error("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.");
+  }
+
   // Check cache first
   const cacheKey = getEmbeddingCacheKey(text);
   const cached = await redis.get(cacheKey);
@@ -49,6 +53,10 @@ export async function getEmbedding(text: string): Promise<number[]> {
  * Get embeddings for multiple texts (batched)
  */
 export async function getEmbeddings(texts: string[]): Promise<number[][]> {
+  if (!openai) {
+    throw new Error("OpenAI API key not configured. Set OPENAI_API_KEY environment variable.");
+  }
+
   if (texts.length === 0) return [];
 
   // Check cache for each text
