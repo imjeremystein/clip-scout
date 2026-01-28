@@ -15,10 +15,7 @@ services:
       - key: AUTH_TRUST_HOST
         value: "true"
       - key: NEXTAUTH_URL
-        fromService:
-          type: web
-          name: clip-scout-web
-          property: url
+        sync: false
       - key: REDIS_URL
         fromService:
           type: redis
