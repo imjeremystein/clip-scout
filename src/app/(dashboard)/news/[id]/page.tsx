@@ -9,6 +9,7 @@ import {
   X,
   AlertCircle,
 } from "lucide-react";
+import { stripHtml } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -114,7 +115,7 @@ export default async function NewsDetailPage({ params }: NewsDetailPageProps) {
             </CardHeader>
             <CardContent>
               {newsItem.content ? (
-                <p className="whitespace-pre-wrap">{newsItem.content}</p>
+                <p className="whitespace-pre-wrap">{stripHtml(newsItem.content)}</p>
               ) : (
                 <p className="text-muted-foreground">No content available</p>
               )}

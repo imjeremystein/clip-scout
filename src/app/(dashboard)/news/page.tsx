@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Newspaper, ExternalLink, Video, Clock } from "lucide-react";
+import { Newspaper, ExternalLink, Video, Clock, CheckCircle2 } from "lucide-react";
+import { stripHtml } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -83,12 +84,20 @@ export default async function NewsPage({ searchParams }: NewsPageProps) {
             <Card key={item.id} className="flex flex-col">
               <CardHeader className="pb-2">
                 <div className="flex items-center justify-between gap-2">
-                  <Badge
-                    variant="secondary"
-                    className={TYPE_COLORS[item.type] || TYPE_COLORS.ANALYSIS}
-                  >
-                    {item.type}
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      className={TYPE_COLORS[item.type] || TYPE_COLORS.ANALYSIS}
+                    >
+                      {item.type}
+                    </Badge>
+                    {item.clipMatches.length > 0 && (
+                      <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
+                        <CheckCircle2 className="h-3 w-3 mr-1" />
+                        Clip Matched
+                      </Badge>
+                    )}
+                  </div>
                   <span className="text-xs text-muted-foreground">
                     Score: {Math.round(item.importanceScore)}
                   </span>
@@ -113,7 +122,7 @@ export default async function NewsPage({ searchParams }: NewsPageProps) {
               <CardContent className="flex-1 flex flex-col">
                 {item.content && (
                   <p className="text-sm text-muted-foreground line-clamp-3 mb-4">
-                    {item.content}
+                    {stripHtml(item.content)}
                   </p>
                 )}
 
@@ -134,12 +143,12 @@ export default async function NewsPage({ searchParams }: NewsPageProps) {
                   </div>
                 )}
 
-                {/* Clip Matches */}
-                {item.clipMatches.length > 0 && (
+                {/* Clip Matches - show count if multiple */}
+                {item.clipMatches.length > 1 && (
                   <div className="mt-auto pt-2 border-t">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="flex items-center gap-2 text-sm text-green-600">
                       <Video className="h-4 w-4" />
-                      <span>{item.clipMatches.length} clip(s) matched</span>
+                      <span>{item.clipMatches.length} clips matched</span>
                     </div>
                   </div>
                 )}

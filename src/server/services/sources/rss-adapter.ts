@@ -25,8 +25,10 @@ export class RssAdapter extends BaseAdapter {
     this.parser = new Parser({
       timeout: 30000, // 30 second timeout
       headers: {
-        "User-Agent": process.env.SCRAPER_USER_AGENT || "ClipScout/1.0 (News Aggregator)",
-        Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml",
+        "User-Agent": process.env.SCRAPER_USER_AGENT ||
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        Accept: "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+        "Accept-Language": "en-US,en;q=0.9",
       },
       customFields: {
         item: [
@@ -156,17 +158,48 @@ export class RssAdapter extends BaseAdapter {
     // Determine news type based on content analysis
     const type = this.inferNewsType(item.title || "", item.content || "");
 
+    // Get content and strip HTML tags
+    const rawContent = item.contentEncoded || item.content || item.contentSnippet || "";
+    const cleanContent = this.stripHtml(rawContent);
+
     return {
       externalId: this.hashId(externalId),
       type,
       headline: item.title || "Untitled",
-      content: item.contentEncoded || item.content || item.contentSnippet || "",
+      content: cleanContent,
       url: item.link || undefined,
       imageUrl,
       publishedAt: item.pubDate ? new Date(item.pubDate) : new Date(),
       author: item.creator || item.dcCreator || undefined,
       rawData: item,
     };
+  }
+
+  /**
+   * Strip HTML tags from content and clean up whitespace.
+   */
+  private stripHtml(html: string): string {
+    return html
+      // Remove script and style elements entirely
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+      // Replace block-level elements with newlines
+      .replace(/<\/(p|div|br|h[1-6]|li|tr)>/gi, "\n")
+      .replace(/<(br|hr)\s*\/?>/gi, "\n")
+      // Remove all remaining HTML tags
+      .replace(/<[^>]+>/g, "")
+      // Decode common HTML entities
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&apos;/g, "'")
+      // Clean up whitespace
+      .replace(/\n\s*\n/g, "\n\n")
+      .replace(/[ \t]+/g, " ")
+      .trim();
   }
 
   /**

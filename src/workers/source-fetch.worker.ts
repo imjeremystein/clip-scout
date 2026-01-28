@@ -7,6 +7,7 @@ import {
   importanceScoreQueue,
 } from "@/lib/queue";
 import { getAdapterOrThrow } from "@/server/services/sources";
+import { isOddsAdapter, isResultsAdapter } from "@/server/services/sources/base-adapter";
 import type { RawNewsItem, RawOddsData, RawGameResult } from "@/server/services/sources/types";
 import { subDays } from "date-fns";
 
@@ -54,6 +55,8 @@ export async function processSourceFetch(job: Job<SourceFetchJobData>) {
 
     let itemsFetched = 0;
     let newItems = 0;
+    let resultsCreated = 0;
+    let oddsCreated = 0;
 
     // Process news items
     for (const item of result.items) {
@@ -104,6 +107,84 @@ export async function processSourceFetch(job: Job<SourceFetchJobData>) {
       });
     }
 
+    // Fetch and store game results if adapter supports it
+    if (isResultsAdapter(adapter)) {
+      try {
+        const gameResults = await adapter.fetchResults(source, { since, limit: 100 });
+        console.log(`[SourceFetch] Fetched ${gameResults.length} game results`);
+
+        for (const result of gameResults) {
+          // Upsert game result (update if exists, create if not)
+          await prisma.gameResult.upsert({
+            where: {
+              orgId_homeTeam_awayTeam_gameDate: {
+                orgId,
+                homeTeam: result.homeTeam,
+                awayTeam: result.awayTeam,
+                gameDate: result.gameDate,
+              },
+            },
+            update: {
+              homeScore: result.homeScore,
+              awayScore: result.awayScore,
+              status: result.status,
+              statsJson: result.statsJson,
+              externalGameId: result.externalGameId,
+            },
+            create: {
+              orgId,
+              sourceId,
+              sport: source.sport,
+              homeTeam: result.homeTeam,
+              awayTeam: result.awayTeam,
+              gameDate: result.gameDate,
+              homeScore: result.homeScore,
+              awayScore: result.awayScore,
+              status: result.status,
+              statsJson: result.statsJson,
+              externalGameId: result.externalGameId,
+            },
+          });
+          resultsCreated++;
+        }
+      } catch (error) {
+        console.error(`[SourceFetch] Error fetching results:`, error);
+      }
+    }
+
+    // Fetch and store odds if adapter supports it
+    if (isOddsAdapter(adapter)) {
+      try {
+        const oddsData = await adapter.fetchOdds(source, { since, limit: 100 });
+        console.log(`[SourceFetch] Fetched ${oddsData.length} odds snapshots`);
+
+        for (const odds of oddsData) {
+          // Create new odds snapshot (always create to track line movement)
+          await prisma.oddsSnapshot.create({
+            data: {
+              orgId,
+              sourceId,
+              sport: source.sport,
+              homeTeam: odds.homeTeam,
+              awayTeam: odds.awayTeam,
+              gameDate: odds.gameDate,
+              externalGameId: odds.externalGameId,
+              homeMoneyline: odds.homeMoneyline,
+              awayMoneyline: odds.awayMoneyline,
+              spread: odds.spread,
+              spreadJuice: odds.spreadJuice,
+              overUnder: odds.overUnder,
+              overJuice: odds.overJuice,
+              underJuice: odds.underJuice,
+            },
+          });
+          oddsCreated++;
+        }
+      } catch (error) {
+        console.error(`[SourceFetch] Error fetching odds:`, error);
+      }
+    }
+
     // Update source status
     await prisma.source.update({
       where: { id: sourceId },
@@ -125,8 +206,8 @@ export async function processSourceFetch(job: Job<SourceFetchJobData>) {
       },
     });
 
-    console.log(`[SourceFetch] Job ${job.id} completed: ${newItems} new items`);
-    return { itemsFetched, newItems };
+    console.log(`[SourceFetch] Job ${job.id} completed: ${newItems} news, ${resultsCreated} results, ${oddsCreated} odds`);
+    return { itemsFetched, newItems, resultsCreated, oddsCreated };
   } catch (error) {
     console.error(`[SourceFetch] Job ${job.id} failed:`, error);
 
