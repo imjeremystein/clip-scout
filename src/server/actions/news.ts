@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
-import { sourceFetchQueue } from "@/lib/queue";
+import { fetchSourceDirect } from "@/server/services/sources/fetch-source";
 import type { ClipMatchStatus, Sport, SourceType } from "@prisma/client";
 import { subMinutes } from "date-fns";
 
@@ -219,16 +219,15 @@ export async function refreshAllSources(sport?: Sport) {
     return { success: false, message: "No active sources found" };
   }
 
-  // Queue fetch jobs for each source
-  const now = new Date();
-  let queuedCount = 0;
+  // Fetch sources directly (serverless-compatible)
+  let fetchedCount = 0;
 
   for (const source of sources) {
     // Check for existing running fetch
     const existingRun = await prisma.sourceFetchRun.findFirst({
       where: {
         sourceId: source.id,
-        status: { in: ["QUEUED", "RUNNING"] },
+        status: "RUNNING",
       },
     });
 
@@ -236,29 +235,9 @@ export async function refreshAllSources(sport?: Sport) {
       continue; // Skip if already running
     }
 
-    // Create fetch run
-    const fetchRun = await prisma.sourceFetchRun.create({
-      data: {
-        sourceId: source.id,
-        status: "QUEUED",
-        triggeredBy: "MANUAL",
-        startedAt: now,
-      },
-    });
-
-    // Queue the job
-    await sourceFetchQueue.add(
-      "manual-refresh-all",
-      {
-        sourceId: source.id,
-        fetchRunId: fetchRun.id,
-        orgId,
-        triggeredBy: "MANUAL",
-      },
-      { priority: 1 } // High priority for manual runs
-    );
-
-    queuedCount++;
+    // Fetch directly (serverless-compatible, no worker required)
+    await fetchSourceDirect(source.id, "MANUAL");
+    fetchedCount++;
   }
 
   // Create audit event
@@ -269,7 +248,7 @@ export async function refreshAllSources(sport?: Sport) {
       eventType: "QUERY_RUN_STARTED",
       entityType: "Source",
       entityId: "all",
-      action: `Triggered refresh of ${queuedCount} sources${sport ? ` for ${sport}` : ""}`,
+      action: `Refreshed ${fetchedCount} sources${sport ? ` for ${sport}` : ""}`,
     },
   });
 
@@ -278,8 +257,8 @@ export async function refreshAllSources(sport?: Sport) {
 
   return {
     success: true,
-    message: `Queued ${queuedCount} of ${sources.length} sources for refresh`,
-    queuedCount,
+    message: `Fetched ${fetchedCount} of ${sources.length} sources`,
+    queuedCount: fetchedCount,
     totalSources: sources.length,
   };
 }
@@ -447,7 +426,7 @@ export async function refreshResultsByType(
 
   const now = new Date();
   const cooldownThreshold = subMinutes(now, 1);
-  let queuedCount = 0;
+  let fetchedCount = 0;
   let skippedCount = 0;
 
   for (const source of sources) {
@@ -464,11 +443,11 @@ export async function refreshResultsByType(
       continue;
     }
 
-    // Check for already running/queued jobs
+    // Check for already running jobs
     const existingRun = await prisma.sourceFetchRun.findFirst({
       where: {
         sourceId: source.id,
-        status: { in: ["QUEUED", "RUNNING"] },
+        status: "RUNNING",
       },
     });
 
@@ -477,29 +456,9 @@ export async function refreshResultsByType(
       continue;
     }
 
-    // Create fetch run
-    const fetchRun = await prisma.sourceFetchRun.create({
-      data: {
-        sourceId: source.id,
-        status: "QUEUED",
-        triggeredBy: "MANUAL",
-        startedAt: now,
-      },
-    });
-
-    // Queue the job
-    await sourceFetchQueue.add(
-      "manual-refresh",
-      {
-        sourceId: source.id,
-        fetchRunId: fetchRun.id,
-        orgId,
-        triggeredBy: "MANUAL",
-      },
-      { priority: 1 }
-    );
-
-    queuedCount++;
+    // Fetch directly (serverless-compatible, no worker required)
+    await fetchSourceDirect(source.id, "MANUAL");
+    fetchedCount++;
   }
 
   // Create audit event
@@ -510,7 +469,7 @@ export async function refreshResultsByType(
       eventType: "QUERY_RUN_STARTED",
       entityType: "Source",
       entityId: "refresh-by-type",
-      action: `Refreshed ${type} sources: ${queuedCount} queued, ${skippedCount} skipped`,
+      action: `Refreshed ${type} sources: ${fetchedCount} fetched, ${skippedCount} skipped`,
     },
   });
 
@@ -521,8 +480,8 @@ export async function refreshResultsByType(
 
   return {
     success: true,
-    message: `Queued ${queuedCount} of ${sources.length} sources`,
-    queuedCount,
+    message: `Fetched ${fetchedCount} of ${sources.length} sources`,
+    queuedCount: fetchedCount,
     skippedCount,
     totalSources: sources.length,
   };

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { sourceFetchQueue } from "@/lib/queue";
 import { addMinutes, addDays, addHours } from "date-fns";
 import type { ScheduleType } from "@prisma/client";
+import { fetchSourceDirect } from "@/server/services/sources/fetch-source";
 
 // Verify cron secret to prevent unauthorized access
 function verifyCronSecret(request: Request): boolean {
@@ -48,23 +48,8 @@ export async function GET(request: Request) {
         continue;
       }
 
-      // Create fetch run record
-      const fetchRun = await prisma.sourceFetchRun.create({
-        data: {
-          sourceId: source.id,
-          status: "QUEUED",
-          triggeredBy: "SCHEDULED",
-          startedAt: now,
-        },
-      });
-
-      // Queue the fetch job
-      await sourceFetchQueue.add("scheduled-fetch", {
-        sourceId: source.id,
-        fetchRunId: fetchRun.id,
-        orgId: source.orgId,
-        triggeredBy: "SCHEDULED",
-      });
+      // Fetch directly (serverless-compatible, no worker required)
+      await fetchSourceDirect(source.id, "SCHEDULED");
 
       // Calculate next fetch time
       const nextFetchAt = calculateNextFetchTime(
