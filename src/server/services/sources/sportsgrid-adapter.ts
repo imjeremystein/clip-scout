@@ -12,6 +12,40 @@ import { BaseAdapter, type OddsAdapter } from "./base-adapter";
 // SportsGrid API endpoint
 const SPORTSGRID_API_URL = "https://web.sportsgrid.com/api/web/v1/getSingleSportGamesData";
 
+// Team abbreviation to full name mappings
+const NFL_TEAMS: Record<string, string> = {
+  'ARI': 'Arizona Cardinals', 'ATL': 'Atlanta Falcons', 'BAL': 'Baltimore Ravens',
+  'BUF': 'Buffalo Bills', 'CAR': 'Carolina Panthers', 'CHI': 'Chicago Bears',
+  'CIN': 'Cincinnati Bengals', 'CLE': 'Cleveland Browns', 'DAL': 'Dallas Cowboys',
+  'DEN': 'Denver Broncos', 'DET': 'Detroit Lions', 'GB': 'Green Bay Packers',
+  'HOU': 'Houston Texans', 'IND': 'Indianapolis Colts', 'JAX': 'Jacksonville Jaguars',
+  'KC': 'Kansas City Chiefs', 'LV': 'Las Vegas Raiders', 'LAC': 'Los Angeles Chargers',
+  'LAR': 'Los Angeles Rams', 'MIA': 'Miami Dolphins', 'MIN': 'Minnesota Vikings',
+  'NE': 'New England Patriots', 'NO': 'New Orleans Saints', 'NYG': 'New York Giants',
+  'NYJ': 'New York Jets', 'PHI': 'Philadelphia Eagles', 'PIT': 'Pittsburgh Steelers',
+  'SF': 'San Francisco 49ers', 'SEA': 'Seattle Seahawks', 'TB': 'Tampa Bay Buccaneers',
+  'TEN': 'Tennessee Titans', 'WAS': 'Washington Commanders'
+};
+
+const NBA_TEAMS: Record<string, string> = {
+  'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
+  'CHA': 'Charlotte Hornets', 'CHI': 'Chicago Bulls', 'CLE': 'Cleveland Cavaliers',
+  'DAL': 'Dallas Mavericks', 'DEN': 'Denver Nuggets', 'DET': 'Detroit Pistons',
+  'GSW': 'Golden State Warriors', 'HOU': 'Houston Rockets', 'IND': 'Indiana Pacers',
+  'LAC': 'Los Angeles Clippers', 'LAL': 'Los Angeles Lakers', 'MEM': 'Memphis Grizzlies',
+  'MIA': 'Miami Heat', 'MIL': 'Milwaukee Bucks', 'MIN': 'Minnesota Timberwolves',
+  'NOP': 'New Orleans Pelicans', 'NYK': 'New York Knicks', 'OKC': 'Oklahoma City Thunder',
+  'ORL': 'Orlando Magic', 'PHI': 'Philadelphia 76ers', 'PHX': 'Phoenix Suns',
+  'POR': 'Portland Trail Blazers', 'SAC': 'Sacramento Kings', 'SAS': 'San Antonio Spurs',
+  'TOR': 'Toronto Raptors', 'UTA': 'Utah Jazz', 'WAS': 'Washington Wizards'
+};
+
+function getFullTeamName(abbrev: string, sport: Sport): string {
+  if (sport === 'NFL') return NFL_TEAMS[abbrev] || abbrev;
+  if (sport === 'NBA') return NBA_TEAMS[abbrev] || abbrev;
+  return abbrev;
+}
+
 // Sport to SportsGrid sport name mapping (lowercase)
 const SPORT_MAP: Record<Sport, string> = {
   NFL: "nfl",
@@ -90,7 +124,7 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
           break;
         }
 
-        const oddData = this.parseGame(game);
+        const oddData = this.parseGame(game, source.sport);
         if (oddData) {
           odds.push(oddData);
         }
@@ -173,10 +207,14 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
    * - away_ml_point ("-213") -> awayMoneyline (-213)
    * - home_total_point ("U 45.5") -> overUnder (45.5)
    */
-  private parseGame(game: SportsGridGame): RawOddsData | null {
+  private parseGame(game: SportsGridGame, sport: Sport): RawOddsData | null {
     if (!game.home_name || !game.away_name) {
       return null;
     }
+
+    // Convert abbreviations to full team names
+    const homeTeam = getFullTeamName(game.home_name, sport);
+    const awayTeam = getFullTeamName(game.away_name, sport);
 
     // Parse spread from home_spread_point (e.g., "+4.5" or "-3.5")
     let spread: number | undefined;
@@ -226,8 +264,8 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter {
 
     return {
       externalGameId: game.key || undefined,
-      homeTeam: game.home_name,
-      awayTeam: game.away_name,
+      homeTeam,
+      awayTeam,
       gameDate,
       homeMoneyline,
       awayMoneyline,
