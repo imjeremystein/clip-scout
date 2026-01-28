@@ -4,6 +4,7 @@ import { rssAdapter } from "./rss-adapter";
 import { scraperAdapter } from "./scraper-adapter";
 import { espnAdapter } from "./espn-adapter";
 import { draftKingsAdapter } from "./draftkings-adapter";
+import { draftKingsScraperAdapter } from "./draftkings-scraper";
 
 /**
  * Registry of all available source adapters.
@@ -13,6 +14,7 @@ adapterRegistry.set("RSS_FEED", rssAdapter);
 adapterRegistry.set("WEBSITE_SCRAPE", scraperAdapter);
 adapterRegistry.set("ESPN_API", espnAdapter);
 adapterRegistry.set("DRAFTKINGS_API", draftKingsAdapter);
+adapterRegistry.set("DRAFTKINGS_SCRAPE", draftKingsScraperAdapter);
 
 /**
  * Get the appropriate adapter for a source type.
@@ -253,8 +255,8 @@ const sourceTypeInfoMap = new Map<SourceType, SourceTypeInfo>([
     "DRAFTKINGS_API",
     {
       type: "DRAFTKINGS_API",
-      name: "DraftKings",
-      description: "Fetch betting odds from DraftKings Sportsbook",
+      name: "DraftKings API",
+      description: "Fetch betting odds from DraftKings Sportsbook API (may be geo-restricted)",
       icon: "dollar-sign",
       recommendedRefreshInterval: 15,
       supportsOdds: true,
@@ -282,6 +284,35 @@ const sourceTypeInfoMap = new Map<SourceType, SourceTypeInfo>([
           required: false,
           placeholder: "nfl",
           description: "Specific league (optional)",
+        },
+      ],
+    },
+  ],
+  [
+    "DRAFTKINGS_SCRAPE",
+    {
+      type: "DRAFTKINGS_SCRAPE",
+      name: "DraftKings Scraper",
+      description: "Scrape betting odds from DraftKings website using browser automation",
+      icon: "dollar-sign",
+      recommendedRefreshInterval: 15,
+      supportsOdds: true,
+      supportsResults: false,
+      configFields: [
+        {
+          name: "sport",
+          label: "Sport",
+          type: "select",
+          required: true,
+          description: "The sport to fetch odds for",
+          options: [
+            { value: "nfl", label: "NFL Football" },
+            { value: "nba", label: "NBA Basketball" },
+            { value: "mlb", label: "MLB Baseball" },
+            { value: "nhl", label: "NHL Hockey" },
+            { value: "soccer", label: "Soccer" },
+          ],
+          defaultValue: "nfl",
         },
       ],
     },
@@ -362,4 +393,4 @@ const sourceTypeInfoMap = new Map<SourceType, SourceTypeInfo>([
 ]);
 
 // Re-export adapter instances for direct use
-export { rssAdapter, scraperAdapter, espnAdapter, draftKingsAdapter };
+export { rssAdapter, scraperAdapter, espnAdapter, draftKingsAdapter, draftKingsScraperAdapter };
