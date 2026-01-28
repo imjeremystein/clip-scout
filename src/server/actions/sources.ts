@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
-import { sourceFetchQueue } from "@/lib/queue";
+import { fetchSourceDirect } from "@/server/services/sources/fetch-source";
 import { getAdapterOrThrow } from "@/server/services/sources";
 import { addMinutes, addDays, addHours, subMinutes } from "date-fns";
 import type { SourceType, SourceStatus, ScheduleType, Sport } from "@prisma/client";
@@ -306,17 +306,11 @@ export async function runSourceNow(sourceId: string) {
     },
   });
 
-  // Queue the job with high priority
-  await sourceFetchQueue.add(
-    "manual-fetch",
-    {
-      sourceId,
-      fetchRunId: fetchRun.id,
-      orgId,
-      triggeredBy: "MANUAL",
-    },
-    { priority: 1 }
-  );
+  // Run fetch directly (serverless-compatible)
+  // Don't await - let it run in the background
+  fetchSourceDirect(sourceId).catch((error) => {
+    console.error(`Manual fetch failed for source ${sourceId}:`, error);
+  });
 
   // Create audit event
   await prisma.auditEvent.create({

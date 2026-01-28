@@ -5,7 +5,20 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
-import { queryRunQueue, QueryRunJobData } from "@/lib/queue";
+
+// Lazy import to avoid Redis connection at module load time (for serverless)
+async function getQueryRunQueue() {
+  const { queryRunQueue } = await import("@/lib/queue");
+  return queryRunQueue;
+}
+
+interface QueryRunJobData {
+  queryRunId: string;
+  queryDefinitionId: string;
+  orgId: string;
+  triggeredBy: "MANUAL" | "SCHEDULED" | "SYSTEM";
+  triggeredByUserId?: string;
+}
 
 // Schema for creating/updating a query definition
 const queryDefinitionSchema = z.object({
@@ -376,9 +389,23 @@ export async function startQueryRun(queryDefId: string) {
     triggeredByUserId: userId,
   };
 
-  await queryRunQueue.add("run-query", jobData, {
-    jobId: queryRun.id,
-  });
+  // Queue the job (will fail silently if Redis not available in serverless)
+  try {
+    const queue = await getQueryRunQueue();
+    await queue.add("run-query", jobData, {
+      jobId: queryRun.id,
+    });
+  } catch (error) {
+    console.warn("Could not queue job (Redis may not be available):", error);
+    // Mark run as failed if we can't queue it
+    await prisma.queryRun.update({
+      where: { id: queryRun.id },
+      data: {
+        status: "FAILED",
+        errorMessage: "Queue unavailable - Redis not configured for serverless environment"
+      },
+    });
+  }
 
   // Create audit event
   await prisma.auditEvent.create({

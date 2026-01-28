@@ -1,5 +1,5 @@
 import { Queue, Worker, Job } from "bullmq";
-import redis from "./redis";
+import { getRedis, isRedisConfigured } from "./redis";
 
 // Queue names (BullMQ doesn't allow colons in queue names)
 export const QUEUE_NAMES = {
@@ -15,37 +15,89 @@ export const QUEUE_NAMES = {
   CLIP_PAIR: "clipscout-clip-pair",
 } as const;
 
-// Default queue options
-const defaultQueueOptions = {
-  connection: redis,
-  defaultJobOptions: {
-    attempts: 3,
-    backoff: {
-      type: "exponential" as const,
-      delay: 5000,
-    },
-    removeOnComplete: {
-      age: 24 * 3600, // Keep completed jobs for 24 hours
-      count: 1000,
-    },
-    removeOnFail: {
-      age: 7 * 24 * 3600, // Keep failed jobs for 7 days
-    },
-  },
+// Cache for queue instances
+const queueCache = new Map<string, Queue>();
+
+/**
+ * Get or create a queue instance (lazy initialization).
+ * Only connects to Redis when actually called.
+ */
+function getQueue(name: string): Queue {
+  if (!isRedisConfigured()) {
+    throw new Error("Redis is not configured. Set REDIS_URL environment variable.");
+  }
+
+  let queue = queueCache.get(name);
+  if (!queue) {
+    queue = new Queue(name, {
+      connection: getRedis(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: {
+          type: "exponential" as const,
+          delay: 5000,
+        },
+        removeOnComplete: {
+          age: 24 * 3600,
+          count: 1000,
+        },
+        removeOnFail: {
+          age: 7 * 24 * 3600,
+        },
+      },
+    });
+    queueCache.set(name, queue);
+  }
+  return queue;
+}
+
+// Lazy queue getters
+export const queryRunQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.QUERY_RUN); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.QUERY_RUN).add(...args),
 };
 
-// Create queues
-export const queryRunQueue = new Queue(QUEUE_NAMES.QUERY_RUN, defaultQueueOptions);
-export const videoFetchQueue = new Queue(QUEUE_NAMES.VIDEO_FETCH, defaultQueueOptions);
-export const transcriptFetchQueue = new Queue(QUEUE_NAMES.TRANSCRIPT_FETCH, defaultQueueOptions);
-export const videoAnalyzeQueue = new Queue(QUEUE_NAMES.VIDEO_ANALYZE, defaultQueueOptions);
-export const schedulerQueue = new Queue(QUEUE_NAMES.SCHEDULER, defaultQueueOptions);
-export const exportQueue = new Queue(QUEUE_NAMES.EXPORT, defaultQueueOptions);
+export const videoFetchQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.VIDEO_FETCH); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.VIDEO_FETCH).add(...args),
+};
 
-// News ingestion queues
-export const sourceFetchQueue = new Queue(QUEUE_NAMES.SOURCE_FETCH, defaultQueueOptions);
-export const importanceScoreQueue = new Queue(QUEUE_NAMES.IMPORTANCE_SCORE, defaultQueueOptions);
-export const clipPairQueue = new Queue(QUEUE_NAMES.CLIP_PAIR, defaultQueueOptions);
+export const transcriptFetchQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.TRANSCRIPT_FETCH); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.TRANSCRIPT_FETCH).add(...args),
+};
+
+export const videoAnalyzeQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.VIDEO_ANALYZE); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.VIDEO_ANALYZE).add(...args),
+};
+
+export const schedulerQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.SCHEDULER); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.SCHEDULER).add(...args),
+  getRepeatableJobs: () => getQueue(QUEUE_NAMES.SCHEDULER).getRepeatableJobs(),
+  removeRepeatableByKey: (key: string) => getQueue(QUEUE_NAMES.SCHEDULER).removeRepeatableByKey(key),
+};
+
+export const exportQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.EXPORT); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.EXPORT).add(...args),
+};
+
+export const sourceFetchQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.SOURCE_FETCH); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.SOURCE_FETCH).add(...args),
+};
+
+export const importanceScoreQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.IMPORTANCE_SCORE); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.IMPORTANCE_SCORE).add(...args),
+};
+
+export const clipPairQueue = {
+  get instance() { return getQueue(QUEUE_NAMES.CLIP_PAIR); },
+  add: (...args: Parameters<Queue['add']>) => getQueue(QUEUE_NAMES.CLIP_PAIR).add(...args),
+};
 
 // Job data types
 export interface QueryRunJobData {
@@ -112,27 +164,34 @@ export function createWorker<T>(
   processor: (job: Job<T>) => Promise<void>,
   options: { concurrency?: number } = {}
 ) {
+  if (!isRedisConfigured()) {
+    throw new Error("Redis is not configured. Set REDIS_URL environment variable.");
+  }
+
   return new Worker<T>(queueName, processor, {
-    connection: redis,
+    connection: getRedis(),
     concurrency: options.concurrency || 5,
   });
 }
 
 // Helper to add a job with priority
 export async function addPriorityJob<T>(
-  queue: Queue<T>,
+  queue: { add: Queue['add'] },
   name: string,
   data: T,
   priority: "high" | "normal" | "low" = "normal"
 ) {
   const priorityMap = { high: 1, normal: 5, low: 10 };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (queue as any).add(name, data, { priority: priorityMap[priority] });
+  return queue.add(name, data, { priority: priorityMap[priority] });
 }
 
 // Get job status helper
 export async function getJobStatus(queueName: string, jobId: string) {
-  const queue = new Queue(queueName, { connection: redis });
+  if (!isRedisConfigured()) {
+    return null;
+  }
+
+  const queue = getQueue(queueName);
   const job = await queue.getJob(jobId);
 
   if (!job) {

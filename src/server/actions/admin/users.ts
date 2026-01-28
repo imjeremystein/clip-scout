@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
 import type { UserRole, UserStatus } from "@prisma/client";
