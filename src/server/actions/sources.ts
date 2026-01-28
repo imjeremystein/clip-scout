@@ -19,7 +19,7 @@ const createSourceSchema = z.object({
     "TWITTER_LIST",
     "RSS_FEED",
     "WEBSITE_SCRAPE",
-    "DRAFTKINGS_API",
+    "SPORTSGRID_API",
     "ESPN_API",
   ]),
   sport: z.enum(["NFL", "NBA", "MLB", "NHL", "SOCCER", "BOXING", "SPORTS_BETTING"]),

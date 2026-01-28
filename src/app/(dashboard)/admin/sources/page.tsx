@@ -25,7 +25,7 @@ const SOURCE_TYPE_ICONS: Record<string, typeof Rss> = {
   RSS_FEED: Rss,
   WEBSITE_SCRAPE: Globe,
   ESPN_API: Trophy,
-  DRAFTKINGS_API: DollarSign,
+  SPORTSGRID_API: DollarSign,
 };
 
 const STATUS_COLORS: Record<string, string> = {

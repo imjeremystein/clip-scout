@@ -20,17 +20,17 @@ async function initializeAdapters(): Promise<void> {
 
   try {
     // Dynamic imports to avoid bundling issues in RSC
-    const [rssModule, scraperModule, espnModule, draftKingsModule] = await Promise.all([
+    const [rssModule, scraperModule, espnModule, sportsGridModule] = await Promise.all([
       import("./rss-adapter"),
       import("./scraper-adapter"),
       import("./espn-adapter"),
-      import("./draftkings-adapter"),
+      import("./sportsgrid-adapter"),
     ]);
 
     adapterRegistry.set("RSS_FEED", rssModule.rssAdapter);
     adapterRegistry.set("WEBSITE_SCRAPE", scraperModule.scraperAdapter);
     adapterRegistry.set("ESPN_API", espnModule.espnAdapter);
-    adapterRegistry.set("DRAFTKINGS_API", draftKingsModule.draftKingsAdapter);
+    adapterRegistry.set("SPORTSGRID_API", sportsGridModule.sportsGridAdapter);
 
     adaptersInitialized = true;
   } catch (error) {
@@ -81,8 +81,7 @@ export function hasAdapter(type: SourceType): boolean {
     "RSS_FEED",
     "WEBSITE_SCRAPE",
     "ESPN_API",
-    "DRAFTKINGS_API",
-    "DRAFTKINGS_SCRAPE",
+    "SPORTSGRID_API",
   ];
   return supportedTypes.includes(type) || adapterRegistry.has(type);
 }
@@ -92,7 +91,7 @@ export function hasAdapter(type: SourceType): boolean {
  * @returns Array of registered source types
  */
 export function getRegisteredTypes(): SourceType[] {
-  return ["RSS_FEED", "WEBSITE_SCRAPE", "ESPN_API", "DRAFTKINGS_API", "DRAFTKINGS_SCRAPE"];
+  return ["RSS_FEED", "WEBSITE_SCRAPE", "ESPN_API", "SPORTSGRID_API"];
 }
 
 /**
@@ -292,59 +291,22 @@ const sourceTypeInfoMap = new Map<SourceType, SourceTypeInfo>([
     },
   ],
   [
-    "DRAFTKINGS_API",
+    "SPORTSGRID_API",
     {
-      type: "DRAFTKINGS_API",
-      name: "DraftKings API",
-      description: "Fetch betting odds from DraftKings Sportsbook API (may be geo-restricted)",
+      type: "SPORTSGRID_API",
+      name: "SportsGrid",
+      description: "Fetch betting odds from SportsGrid's public API",
       icon: "dollar-sign",
-      recommendedRefreshInterval: 15,
+      recommendedRefreshInterval: 10,
       supportsOdds: true,
       supportsResults: false,
       configFields: [
         {
           name: "sport",
-          label: "Sport",
+          label: "Sport Override",
           type: "select",
-          required: true,
-          description: "The sport to fetch odds for",
-          options: [
-            { value: "nfl", label: "NFL Football" },
-            { value: "nba", label: "NBA Basketball" },
-            { value: "mlb", label: "MLB Baseball" },
-            { value: "nhl", label: "NHL Hockey" },
-            { value: "soccer", label: "Soccer" },
-          ],
-          defaultValue: "nfl",
-        },
-        {
-          name: "league",
-          label: "League",
-          type: "text",
           required: false,
-          placeholder: "nfl",
-          description: "Specific league (optional)",
-        },
-      ],
-    },
-  ],
-  [
-    "DRAFTKINGS_SCRAPE",
-    {
-      type: "DRAFTKINGS_SCRAPE",
-      name: "DraftKings Scraper",
-      description: "Scrape betting odds from DraftKings website using browser automation",
-      icon: "dollar-sign",
-      recommendedRefreshInterval: 15,
-      supportsOdds: true,
-      supportsResults: false,
-      configFields: [
-        {
-          name: "sport",
-          label: "Sport",
-          type: "select",
-          required: true,
-          description: "The sport to fetch odds for",
+          description: "Override the sport (uses source sport by default)",
           options: [
             { value: "nfl", label: "NFL Football" },
             { value: "nba", label: "NBA Basketball" },
@@ -352,7 +314,6 @@ const sourceTypeInfoMap = new Map<SourceType, SourceTypeInfo>([
             { value: "nhl", label: "NHL Hockey" },
             { value: "soccer", label: "Soccer" },
           ],
-          defaultValue: "nfl",
         },
       ],
     },

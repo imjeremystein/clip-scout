@@ -403,10 +403,7 @@ const NEWS_SOURCE_TYPES: SourceType[] = [
   "RSS_FEED",
   "WEBSITE_SCRAPE",
 ];
-const ODDS_SOURCE_TYPES: SourceType[] = [
-  "DRAFTKINGS_API",
-  "DRAFTKINGS_SCRAPE",
-];
+const ODDS_SOURCE_TYPES: SourceType[] = ["SPORTSGRID_API"];
 const RESULTS_SOURCE_TYPES: SourceType[] = ["ESPN_API"];
 
 /**
@@ -435,7 +432,7 @@ export async function refreshResultsByType(
   if (sources.length === 0) {
     const categoryMessages: Record<string, string> = {
       news: "No active news sources (RSS, Twitter, web scraper) configured",
-      odds: "No active odds sources (DraftKings) configured",
+      odds: "No active odds sources (SportsGrid) configured",
       results: "No active results sources (ESPN API) configured",
       all: "No active sources configured",
     };

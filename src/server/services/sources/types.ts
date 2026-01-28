@@ -42,10 +42,8 @@ export interface WebsiteScraperConfig {
   maxItems?: number;
 }
 
-export interface DraftKingsConfig {
-  sport: string; // "nfl", "nba", "mlb", etc.
-  league?: string;
-  eventGroup?: string;
+export interface SportsGridConfig {
+  sport?: string; // Optional sport override (lowercase: "nfl", "nba", "mlb", etc.)
 }
 
 export interface EspnConfig {
@@ -60,7 +58,7 @@ export type SourceConfig =
   | TwitterListConfig
   | RssFeedConfig
   | WebsiteScraperConfig
-  | DraftKingsConfig
+  | SportsGridConfig
   | EspnConfig;
 
 // ============================================================================

@@ -46,7 +46,7 @@ const SOURCE_TYPES = [
   { value: "RSS_FEED", label: "RSS Feed", icon: Rss },
   { value: "WEBSITE_SCRAPE", label: "Website Scraper", icon: Globe },
   { value: "ESPN_API", label: "ESPN", icon: Trophy },
-  { value: "DRAFTKINGS_API", label: "DraftKings", icon: DollarSign },
+  { value: "SPORTSGRID_API", label: "SportsGrid", icon: DollarSign },
 ];
 
 const SCHEDULE_TYPES = [
@@ -245,17 +245,17 @@ export function SourceForm({ mode, initialData }: SourceFormProps) {
           </div>
         );
 
-      case "DRAFTKINGS_API":
+      case "SPORTSGRID_API":
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="dkSport">Sport</Label>
+              <Label htmlFor="sgSport">Sport Override (optional)</Label>
               <Select
-                value={(config.sport as string) || "nfl"}
+                value={(config.sport as string) || ""}
                 onValueChange={(value) => handleConfigChange("sport", value)}
               >
                 <SelectTrigger>
-                  <SelectValue />
+                  <SelectValue placeholder="Use source sport" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="nfl">NFL Football</SelectItem>
@@ -264,9 +264,12 @@ export function SourceForm({ mode, initialData }: SourceFormProps) {
                   <SelectItem value="nhl">NHL Hockey</SelectItem>
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Leave empty to use the source sport setting
+              </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              Note: DraftKings has strict rate limits. Recommended refresh interval: 15+ minutes.
+              Note: Recommended refresh interval: 10+ minutes.
             </p>
           </div>
         );

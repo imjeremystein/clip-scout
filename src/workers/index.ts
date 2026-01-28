@@ -10,7 +10,6 @@
 import { Worker } from "bullmq";
 import redis from "@/lib/redis";
 import { QUEUE_NAMES } from "@/lib/queue";
-import { registerAdapter } from "@/server/services/sources/adapter-factory";
 import { processSourceFetch, createSourceFetchWorker } from "./source-fetch.worker";
 import { processImportanceScore, createImportanceScoreWorker } from "./importance-score.worker";
 import { processClipPair, createClipPairWorker } from "./clip-pair.worker";
@@ -19,12 +18,6 @@ const workers: Worker[] = [];
 
 async function createWorkers() {
   console.log("Creating workers...");
-
-  // Register adapters that can't be bundled by Next.js webpack
-  // (puppeteer-extra uses dynamic require which webpack can't handle)
-  const { draftKingsScraperAdapter } = await import("@/server/services/sources/draftkings-scraper");
-  registerAdapter("DRAFTKINGS_SCRAPE", draftKingsScraperAdapter);
-  console.log("  - DRAFTKINGS_SCRAPE adapter registered");
 
   // Source Fetch Worker
   const sourceFetchWorker = createSourceFetchWorker();

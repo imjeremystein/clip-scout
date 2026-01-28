@@ -85,7 +85,7 @@ export default async function OddsPage() {
             <DollarSign className="mx-auto h-12 w-12 text-muted-foreground" />
             <h3 className="mt-4 text-lg font-semibold">No odds data yet</h3>
             <p className="text-muted-foreground">
-              Odds will appear here once DraftKings sources start fetching data.
+              Odds will appear here once SportsGrid sources start fetching data.
             </p>
           </CardContent>
         </Card>
