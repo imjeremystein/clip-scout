@@ -1,145 +1,140 @@
 import NextAuth from "next-auth";
 import { PrismaAdapter } from "@auth/prisma-adapter";
-import Google from "next-auth/providers/google";
-import Resend from "next-auth/providers/resend";
 import Credentials from "next-auth/providers/credentials";
+import bcrypt from "bcrypt";
 import { prisma } from "./prisma";
-
-const isDev = process.env.NODE_ENV === "development";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
-    // DEV ONLY: Credentials provider for easy testing
-    ...(isDev
-      ? [
-          Credentials({
-            name: "Dev Login",
-            credentials: {
-              email: { label: "Email", type: "email" },
-            },
-            async authorize(credentials) {
-              if (!credentials?.email) return null;
+    Credentials({
+      name: "Password",
+      credentials: {
+        email: { label: "Email", type: "email" },
+        password: { label: "Password", type: "password" },
+      },
+      async authorize(credentials) {
+        if (!credentials?.email || !credentials?.password) return null;
 
-              // Find or create user
-              let user = await prisma.user.findUnique({
-                where: { email: credentials.email as string },
-              });
+        const email = credentials.email as string;
+        const password = credentials.password as string;
 
-              if (!user) {
-                user = await prisma.user.create({
-                  data: {
-                    email: credentials.email as string,
-                    name: (credentials.email as string).split("@")[0],
-                    emailVerified: new Date(),
-                  },
-                });
-              }
+        const user = await prisma.user.findUnique({
+          where: { email },
+        });
 
-              return {
-                id: user.id,
-                email: user.email,
-                name: user.name,
-                image: user.image,
-              };
-            },
-          }),
-        ]
-      : []),
-    // Email Magic Link via Resend
-    Resend({
-      apiKey: process.env.RESEND_API_KEY,
-      from: process.env.EMAIL_FROM || "Clip Scout <noreply@clipscout.com>",
-    }),
-    // Google OAuth (optional)
-    Google({
-      clientId: process.env.AUTH_GOOGLE_ID,
-      clientSecret: process.env.AUTH_GOOGLE_SECRET,
+        if (!user || !user.passwordHash) return null;
+
+        const valid = await bcrypt.compare(password, user.passwordHash);
+        if (!valid) return null;
+
+        return {
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          image: user.image,
+        };
+      },
     }),
   ],
   pages: {
     signIn: "/login",
-    verifyRequest: "/verify-request",
     error: "/login",
-    newUser: "/onboarding",
   },
   callbacks: {
     async jwt({ token, user }) {
-      // On sign in, add user id to token
       if (user) {
         token.id = user.id;
       }
       return token;
     },
-    async session({ session, user, token }) {
-      // Get user ID from either database session or JWT token
-      const userId = user?.id || (token?.id as string);
+    async session({ session, token }) {
+      const userId = token?.id as string;
 
       if (!userId) {
         return session;
       }
 
-      // Fetch user's organization membership
-      const membership = await prisma.orgMembership.findFirst({
-        where: {
-          userId: userId,
-          status: "ACTIVE",
-        },
-        include: {
-          org: true,
-        },
-        orderBy: {
-          createdAt: "desc",
+      // Single query: fetch user with their active org membership
+      const dbUser = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          role: true,
+          memberships: {
+            where: { status: "ACTIVE" },
+            include: { org: true },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+          },
         },
       });
+
+      const membership = dbUser?.memberships[0] ?? null;
 
       return {
         ...session,
         user: {
           ...session.user,
           id: userId,
+          role: dbUser?.role ?? "USER",
           organizationId: membership?.orgId ?? null,
           organizationName: membership?.org.name ?? null,
           organizationRole: membership?.role ?? null,
         },
       };
     },
-    async signIn({ user, account }) {
-      // Check if user is accepting an invite
-      if (user.email) {
-        const pendingInvite = await prisma.invite.findFirst({
-          where: {
-            email: user.email,
-            status: "PENDING",
-            expiresAt: { gt: new Date() },
-          },
-        });
+    async signIn({ user }) {
+      if (!user.email) return false;
 
-        if (pendingInvite) {
-          // Accept the invite
-          await prisma.$transaction([
-            prisma.invite.update({
-              where: { id: pendingInvite.id },
-              data: { status: "ACCEPTED" },
-            }),
-            prisma.orgMembership.create({
-              data: {
-                orgId: pendingInvite.orgId,
-                userId: user.id!,
-                role: pendingInvite.role,
-                status: "ACTIVE",
-              },
-            }),
-          ]);
-        }
+      // Block disabled users
+      const dbUser = await prisma.user.findUnique({
+        where: { email: user.email },
+        select: { status: true },
+      });
+
+      if (dbUser?.status === "DISABLED") {
+        return false;
+      }
+
+      // Update last login time
+      await prisma.user.update({
+        where: { email: user.email },
+        data: { lastLoginAt: new Date() },
+      });
+
+      // Check if user is accepting an invite
+      const pendingInvite = await prisma.invite.findFirst({
+        where: {
+          email: user.email,
+          status: "PENDING",
+          expiresAt: { gt: new Date() },
+        },
+      });
+
+      if (pendingInvite) {
+        await prisma.$transaction([
+          prisma.invite.update({
+            where: { id: pendingInvite.id },
+            data: { status: "ACCEPTED" },
+          }),
+          prisma.orgMembership.create({
+            data: {
+              orgId: pendingInvite.orgId,
+              userId: user.id!,
+              role: pendingInvite.role,
+              status: "ACTIVE",
+            },
+          }),
+        ]);
       }
 
       return true;
     },
   },
   session: {
-    // Always use database strategy for compatibility with PrismaAdapter
-    strategy: "database",
+    // Credentials provider requires JWT strategy (database sessions
+    // are not created by the Credentials authorize flow)
+    strategy: "jwt",
   },
 });
 
@@ -151,6 +146,7 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
+      role: "ADMIN" | "USER";
       organizationId: string | null;
       organizationName: string | null;
       organizationRole: "MANAGER" | "MEMBER" | null;

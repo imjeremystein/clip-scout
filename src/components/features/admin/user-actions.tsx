@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { MoreHorizontal, Shield, ShieldOff, Ban, RefreshCw, Trash2, Loader2 } from "lucide-react";
+import { MoreHorizontal, Shield, ShieldOff, Ban, KeyRound, Trash2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -20,12 +22,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   updateUserRole,
   toggleUserStatus,
   deleteUser,
-  resendInvite,
+  resetUserPassword,
 } from "@/server/actions/admin/users";
 
 interface UserActionsProps {
@@ -41,6 +51,8 @@ interface UserActionsProps {
 export function UserActions({ user }: UserActionsProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
 
   const handleRoleChange = async (newRole: "ADMIN" | "USER") => {
     setIsLoading(true);
@@ -73,13 +85,23 @@ export function UserActions({ user }: UserActionsProps) {
     }
   };
 
-  const handleResendInvite = async () => {
+  const handleResetPassword = async () => {
+    if (!newPassword || newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await resendInvite(user.id);
-      toast.success("Invite resent");
+      const formData = new FormData();
+      formData.set("userId", user.id);
+      formData.set("newPassword", newPassword);
+      await resetUserPassword(formData);
+      toast.success("Password reset successfully");
+      setResetPasswordOpen(false);
+      setNewPassword("");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to resend invite");
+      toast.error(error instanceof Error ? error.message : "Failed to reset password");
     } finally {
       setIsLoading(false);
     }
@@ -126,14 +148,13 @@ export function UserActions({ user }: UserActionsProps) {
 
           <DropdownMenuSeparator />
 
-          {/* Status actions */}
-          {user.status === "INVITED" && (
-            <DropdownMenuItem onClick={handleResendInvite}>
-              <RefreshCw className="h-4 w-4 mr-2" />
-              Resend Invite
-            </DropdownMenuItem>
-          )}
+          {/* Reset Password */}
+          <DropdownMenuItem onClick={() => setResetPasswordOpen(true)}>
+            <KeyRound className="h-4 w-4 mr-2" />
+            Reset Password
+          </DropdownMenuItem>
 
+          {/* Status actions */}
           {user.status !== "DISABLED" ? (
             <DropdownMenuItem onClick={handleStatusToggle}>
               <Ban className="h-4 w-4 mr-2" />
@@ -159,6 +180,51 @@ export function UserActions({ user }: UserActionsProps) {
         </DropdownMenuContent>
       </DropdownMenu>
 
+      {/* Reset Password Dialog */}
+      <Dialog open={resetPasswordOpen} onOpenChange={setResetPasswordOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset Password</DialogTitle>
+            <DialogDescription>
+              Set a new password for {user.name || user.email}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New Password</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                placeholder="Enter new password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                minLength={8}
+              />
+              <p className="text-sm text-muted-foreground">
+                Must be at least 8 characters
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setResetPasswordOpen(false);
+                setNewPassword("");
+              }}
+              disabled={isLoading}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleResetPassword} disabled={isLoading}>
+              {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Reset Password
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>

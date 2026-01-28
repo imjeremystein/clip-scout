@@ -10,9 +10,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getNewsFeed, getUnmatchedNewsCount } from "@/server/actions/news";
+import { getNewsFeed, getUnmatchedNewsCount, getLastFetchInfo } from "@/server/actions/news";
 import { formatDistanceToNow } from "date-fns";
 import { NewsFeedFilters } from "@/components/features/news/news-feed-filters";
+import { RefreshButton } from "@/components/features/sources/refresh-button";
 
 interface NewsPageProps {
   searchParams: Promise<{
@@ -39,9 +40,10 @@ export default async function NewsPage({ searchParams }: NewsPageProps) {
   const type = params.type;
   const minScore = params.minScore ? parseInt(params.minScore, 10) : 0;
 
-  const [newsResult, unmatchedCount] = await Promise.all([
+  const [newsResult, unmatchedCount, fetchInfo] = await Promise.all([
     getNewsFeed({ sport, type, minScore, limit: 50 }),
     getUnmatchedNewsCount(),
+    getLastFetchInfo("news"),
   ]);
 
   return (
@@ -59,6 +61,12 @@ export default async function NewsPage({ searchParams }: NewsPageProps) {
             )}
           </p>
         </div>
+        <RefreshButton
+          type="news"
+          lastFetchAt={fetchInfo.lastFetchAt}
+          nextFetchAt={fetchInfo.nextFetchAt}
+          sourceCount={fetchInfo.sourceCount}
+        />
       </div>
 
       {/* Filters */}

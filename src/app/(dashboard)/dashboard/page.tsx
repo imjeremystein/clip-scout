@@ -27,9 +27,10 @@ import {
   getTopCandidatesToday,
   getScheduledRuns,
 } from "@/server/db/dashboard";
-import { getTopNews, getUnmatchedNewsCount } from "@/server/actions/news";
+import { getTopNews, getUnmatchedNewsCount, getLastFetchInfo } from "@/server/actions/news";
 import { getNextScheduledFetches, getSourceHealthStats } from "@/server/actions/sources";
 import type { RecentRun, TopCandidate, ScheduledRun } from "@/types";
+import { RefreshButton } from "@/components/features/sources/refresh-button";
 
 function StatusBadge({ status }: { status: string }) {
   const variants: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -90,7 +91,7 @@ export default async function DashboardPage() {
   const { orgId } = await getTenantContext();
 
   // Fetch all dashboard data in parallel
-  const [stats, recentRuns, topCandidates, scheduledRuns, topNews, unmatchedCount, nextFetches, sourceHealth] = await Promise.all([
+  const [stats, recentRuns, topCandidates, scheduledRuns, topNews, unmatchedCount, nextFetches, sourceHealth, allFetchInfo] = await Promise.all([
     getDashboardStats(orgId),
     getRecentRuns(orgId, 5),
     getTopCandidatesToday(orgId, 5),
@@ -99,6 +100,7 @@ export default async function DashboardPage() {
     getUnmatchedNewsCount(),
     getNextScheduledFetches(5),
     getSourceHealthStats(),
+    getLastFetchInfo("all"),
   ]);
 
   return (
@@ -113,12 +115,20 @@ export default async function DashboardPage() {
             Here&apos;s what&apos;s happening with your clip discovery.
           </p>
         </div>
-        <Link href="/queries/new">
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            New Query
-          </Button>
-        </Link>
+        <div className="flex items-center gap-3">
+          <RefreshButton
+            type="all"
+            lastFetchAt={allFetchInfo.lastFetchAt}
+            nextFetchAt={allFetchInfo.nextFetchAt}
+            sourceCount={allFetchInfo.sourceCount}
+          />
+          <Link href="/queries/new">
+            <Button>
+              <Plus className="mr-2 h-4 w-4" />
+              New Query
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Stats Cards */}

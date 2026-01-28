@@ -20,6 +20,8 @@ export function InviteUserForm() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState<"USER" | "ADMIN">("USER");
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,17 +32,24 @@ export function InviteUserForm() {
       return;
     }
 
+    if (!password || password.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const formData = new FormData();
       formData.set("email", email);
+      formData.set("name", name);
+      formData.set("password", password);
       formData.set("role", role);
 
       await inviteUser(formData);
-      toast.success("Invitation sent successfully");
+      toast.success("User created successfully");
       router.push("/admin/users");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to send invitation");
+      toast.error(error instanceof Error ? error.message : "Failed to create user");
     } finally {
       setIsLoading(false);
     }
@@ -59,8 +68,37 @@ export function InviteUserForm() {
           disabled={isLoading}
           required
         />
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="name">Name</Label>
+        <Input
+          id="name"
+          type="text"
+          placeholder="John Doe"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          disabled={isLoading}
+        />
         <p className="text-sm text-muted-foreground">
-          The user will receive an email with instructions to complete their registration.
+          Optional. Defaults to the email username.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="password">Password</Label>
+        <Input
+          id="password"
+          type="password"
+          placeholder="Set a password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={isLoading}
+          required
+          minLength={8}
+        />
+        <p className="text-sm text-muted-foreground">
+          Must be at least 8 characters. The user can change it later.
         </p>
       </div>
 
@@ -102,7 +140,7 @@ export function InviteUserForm() {
         </Button>
         <Button type="submit" disabled={isLoading}>
           {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-          Send Invitation
+          Create User
         </Button>
       </div>
     </form>

@@ -1,27 +1,58 @@
 import type { SourceType } from "@prisma/client";
 import type { SourceAdapter } from "./base-adapter";
-import { rssAdapter } from "./rss-adapter";
-import { scraperAdapter } from "./scraper-adapter";
-import { espnAdapter } from "./espn-adapter";
-import { draftKingsAdapter } from "./draftkings-adapter";
-import { draftKingsScraperAdapter } from "./draftkings-scraper";
+
+// Note: Adapter imports are done dynamically to avoid bundling browser-incompatible
+// dependencies (like cheerio/undici) into Next.js server components.
 
 /**
  * Registry of all available source adapters.
+ * Adapters are registered lazily to avoid import side effects.
  */
 const adapterRegistry = new Map<SourceType, SourceAdapter>();
-adapterRegistry.set("RSS_FEED", rssAdapter);
-adapterRegistry.set("WEBSITE_SCRAPE", scraperAdapter);
-adapterRegistry.set("ESPN_API", espnAdapter);
-adapterRegistry.set("DRAFTKINGS_API", draftKingsAdapter);
-adapterRegistry.set("DRAFTKINGS_SCRAPE", draftKingsScraperAdapter);
+let adaptersInitialized = false;
+
+/**
+ * Initialize adapters lazily. This should only be called from worker contexts
+ * where Node.js APIs are fully available.
+ */
+async function initializeAdapters(): Promise<void> {
+  if (adaptersInitialized) return;
+
+  try {
+    // Dynamic imports to avoid bundling issues in RSC
+    const [rssModule, scraperModule, espnModule, draftKingsModule] = await Promise.all([
+      import("./rss-adapter"),
+      import("./scraper-adapter"),
+      import("./espn-adapter"),
+      import("./draftkings-adapter"),
+    ]);
+
+    adapterRegistry.set("RSS_FEED", rssModule.rssAdapter);
+    adapterRegistry.set("WEBSITE_SCRAPE", scraperModule.scraperAdapter);
+    adapterRegistry.set("ESPN_API", espnModule.espnAdapter);
+    adapterRegistry.set("DRAFTKINGS_API", draftKingsModule.draftKingsAdapter);
+
+    adaptersInitialized = true;
+  } catch (error) {
+    console.error("Failed to initialize adapters:", error);
+    throw error;
+  }
+}
+
+/**
+ * Register an adapter at runtime (used by workers to register puppeteer-based adapters).
+ */
+export function registerAdapter(type: SourceType, adapter: SourceAdapter): void {
+  adapterRegistry.set(type, adapter);
+}
 
 /**
  * Get the appropriate adapter for a source type.
  * @param type - The source type
  * @returns The adapter instance or undefined if not found
  */
-export function getAdapter(type: SourceType): SourceAdapter | undefined {
+export async function getAdapter(type: SourceType): Promise<SourceAdapter | undefined> {
+  await initializeAdapters();
   return adapterRegistry.get(type);
 }
 
@@ -31,8 +62,8 @@ export function getAdapter(type: SourceType): SourceAdapter | undefined {
  * @returns The adapter instance
  * @throws Error if adapter is not found
  */
-export function getAdapterOrThrow(type: SourceType): SourceAdapter {
-  const adapter = getAdapter(type);
+export async function getAdapterOrThrow(type: SourceType): Promise<SourceAdapter> {
+  const adapter = await getAdapter(type);
   if (!adapter) {
     throw new Error(`No adapter found for source type: ${type}`);
   }
@@ -45,7 +76,15 @@ export function getAdapterOrThrow(type: SourceType): SourceAdapter {
  * @returns true if adapter exists
  */
 export function hasAdapter(type: SourceType): boolean {
-  return adapterRegistry.has(type);
+  // These types are supported even if adapters aren't loaded yet
+  const supportedTypes: SourceType[] = [
+    "RSS_FEED",
+    "WEBSITE_SCRAPE",
+    "ESPN_API",
+    "DRAFTKINGS_API",
+    "DRAFTKINGS_SCRAPE",
+  ];
+  return supportedTypes.includes(type) || adapterRegistry.has(type);
 }
 
 /**
@@ -53,14 +92,15 @@ export function hasAdapter(type: SourceType): boolean {
  * @returns Array of registered source types
  */
 export function getRegisteredTypes(): SourceType[] {
-  return Array.from(adapterRegistry.keys());
+  return ["RSS_FEED", "WEBSITE_SCRAPE", "ESPN_API", "DRAFTKINGS_API", "DRAFTKINGS_SCRAPE"];
 }
 
 /**
  * Get all adapters.
  * @returns Map of source type to adapter
  */
-export function getAllAdapters(): Map<SourceType, SourceAdapter> {
+export async function getAllAdapters(): Promise<Map<SourceType, SourceAdapter>> {
+  await initializeAdapters();
   return new Map(adapterRegistry);
 }
 
@@ -391,6 +431,3 @@ const sourceTypeInfoMap = new Map<SourceType, SourceTypeInfo>([
     },
   ],
 ]);
-
-// Re-export adapter instances for direct use
-export { rssAdapter, scraperAdapter, espnAdapter, draftKingsAdapter, draftKingsScraperAdapter };

@@ -64,7 +64,7 @@ export async function createSource(formData: FormData) {
   });
 
   // Validate config with adapter
-  const adapter = getAdapterOrThrow(data.type as SourceType);
+  const adapter = await getAdapterOrThrow(data.type as SourceType);
   const validationResult = adapter.validateConfig(data.config);
 
   if (!validationResult.valid) {
@@ -145,7 +145,7 @@ export async function updateSource(formData: FormData) {
 
   // Validate config if provided
   if (updateData.config && updateData.type) {
-    const adapter = getAdapterOrThrow(updateData.type as SourceType);
+    const adapter = await getAdapterOrThrow(updateData.type as SourceType);
     const validationResult = adapter.validateConfig(updateData.config);
 
     if (!validationResult.valid) {

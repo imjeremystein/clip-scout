@@ -20,12 +20,11 @@ export {
   getAllAdapters,
   getSourceTypeInfo,
   getAllSourceTypeInfo,
+  registerAdapter,
   type SourceTypeInfo,
   type ConfigField,
 } from "./adapter-factory";
 
-// Export individual adapters
-export { rssAdapter, RssAdapter } from "./rss-adapter";
-export { scraperAdapter, ScraperAdapter } from "./scraper-adapter";
-export { espnAdapter, EspnAdapter } from "./espn-adapter";
-export { draftKingsAdapter, DraftKingsAdapter } from "./draftkings-adapter";
+// Note: Individual adapter exports removed to prevent eager loading
+// of browser-incompatible dependencies (cheerio/undici) in RSC.
+// Use getAdapter() or getAdapterOrThrow() instead.

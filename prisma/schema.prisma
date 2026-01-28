@@ -279,6 +279,7 @@ model User {
   emailVerified DateTime? @map("email_verified")
   name          String?   @db.VarChar(255)
   image         String?   @db.VarChar(500)
+  passwordHash  String?   @map("password_hash") @db.VarChar(255)
 
   // Role-based access (internal tool)
   role        UserRole   @default(USER)

@@ -1,27 +1,36 @@
+import { auth } from "./auth";
 import { prisma } from "./prisma";
 
 /**
- * Get tenant context - for internal tool, uses default org/user from seed data
+ * Get tenant context from the authenticated session.
  */
 export async function getTenantContext() {
-  // For internal tool, find the default test org and user
-  const org = await prisma.organization.findFirst({
-    where: { slug: "test-org" },
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("Not authenticated");
+  }
+
+  const userId = session.user.id;
+
+  // Find the user's active org membership
+  const membership = await prisma.orgMembership.findFirst({
+    where: {
+      userId,
+      status: "ACTIVE",
+    },
+    orderBy: { createdAt: "desc" },
   });
 
-  const user = await prisma.user.findFirst({
-    where: { email: "test@clipscout.dev" },
-  });
-
-  if (!org || !user) {
-    throw new Error("Default org/user not found. Run: npx prisma db seed");
+  if (!membership) {
+    throw new Error("No active organization membership");
   }
 
   return {
-    userId: user.id,
-    orgId: org.id,
-    role: "MANAGER" as const,
-    isManager: true,
+    userId,
+    orgId: membership.orgId,
+    role: membership.role,
+    isManager: membership.role === "MANAGER",
   };
 }
 

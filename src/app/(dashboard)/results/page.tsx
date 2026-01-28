@@ -18,9 +18,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
 import { format, subDays } from "date-fns";
+import { getLastFetchInfo } from "@/server/actions/news";
+import { RefreshButton } from "@/components/features/sources/refresh-button";
 
 export default async function ResultsPage() {
   const { orgId } = await getTenantContext();
+  const fetchInfo = await getLastFetchInfo("results");
 
   // Get recent game results (last 7 days)
   const results = await prisma.gameResult.findMany({
@@ -87,11 +90,19 @@ export default async function ResultsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Game Results</h1>
-        <p className="text-muted-foreground">
-          Recent game scores and betting outcomes
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Game Results</h1>
+          <p className="text-muted-foreground">
+            Recent game scores and betting outcomes
+          </p>
+        </div>
+        <RefreshButton
+          type="results"
+          lastFetchAt={fetchInfo.lastFetchAt}
+          nextFetchAt={fetchInfo.nextFetchAt}
+          sourceCount={fetchInfo.sourceCount}
+        />
       </div>
 
       {Object.keys(resultsBySport).length === 0 ? (

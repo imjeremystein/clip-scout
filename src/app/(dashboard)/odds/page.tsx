@@ -18,9 +18,12 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
 import { format, startOfDay, endOfDay } from "date-fns";
+import { getLastFetchInfo } from "@/server/actions/news";
+import { RefreshButton } from "@/components/features/sources/refresh-button";
 
 export default async function OddsPage() {
   const { orgId } = await getTenantContext();
+  const fetchInfo = await getLastFetchInfo("odds");
 
   // Get today's odds snapshots grouped by game
   const today = new Date();
@@ -61,11 +64,19 @@ export default async function OddsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Betting Odds</h1>
-        <p className="text-muted-foreground">
-          Current betting lines for upcoming games
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Betting Odds</h1>
+          <p className="text-muted-foreground">
+            Current betting lines for upcoming games
+          </p>
+        </div>
+        <RefreshButton
+          type="odds"
+          lastFetchAt={fetchInfo.lastFetchAt}
+          nextFetchAt={fetchInfo.nextFetchAt}
+          sourceCount={fetchInfo.sourceCount}
+        />
       </div>
 
       {Object.keys(gamesBySport).length === 0 ? (

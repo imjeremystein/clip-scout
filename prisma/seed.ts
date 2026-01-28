@@ -1,22 +1,55 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
+
+const SALT_ROUNDS = 12;
 
 async function main() {
   console.log("Starting seed...");
 
-  // Create a test user
+  // Hash the default admin password
+  const adminPasswordHash = await bcrypt.hash("admin123", SALT_ROUNDS);
+
+  // Create admin user
+  const adminUser = await prisma.user.upsert({
+    where: { email: "admin@clipscout.dev" },
+    update: {
+      passwordHash: adminPasswordHash,
+      role: "ADMIN",
+      status: "ACTIVE",
+    },
+    create: {
+      email: "admin@clipscout.dev",
+      name: "Admin User",
+      emailVerified: new Date(),
+      passwordHash: adminPasswordHash,
+      role: "ADMIN",
+      status: "ACTIVE",
+    },
+  });
+
+  console.log("Created admin user:", adminUser.email, "(password: admin123)");
+
+  // Create a regular test user
+  const testPasswordHash = await bcrypt.hash("testuser123", SALT_ROUNDS);
   const testUser = await prisma.user.upsert({
     where: { email: "test@clipscout.dev" },
-    update: {},
+    update: {
+      passwordHash: testPasswordHash,
+      status: "ACTIVE",
+    },
     create: {
       email: "test@clipscout.dev",
       name: "Test User",
       emailVerified: new Date(),
+      passwordHash: testPasswordHash,
+      role: "USER",
+      status: "ACTIVE",
     },
   });
 
-  console.log("Created test user:", testUser.email);
+  console.log("Created test user:", testUser.email, "(password: testuser123)");
 
   // Create a test organization
   const testOrg = await prisma.organization.upsert({
@@ -32,7 +65,26 @@ async function main() {
 
   console.log("Created test organization:", testOrg.name);
 
-  // Create membership linking user to org
+  // Create membership linking admin user to org as MANAGER
+  await prisma.orgMembership.upsert({
+    where: {
+      orgId_userId: {
+        orgId: testOrg.id,
+        userId: adminUser.id,
+      },
+    },
+    update: {},
+    create: {
+      orgId: testOrg.id,
+      userId: adminUser.id,
+      role: "MANAGER",
+      status: "ACTIVE",
+    },
+  });
+
+  console.log("Linked admin user to organization as MANAGER");
+
+  // Create membership linking test user to org as MEMBER
   await prisma.orgMembership.upsert({
     where: {
       orgId_userId: {
@@ -44,12 +96,12 @@ async function main() {
     create: {
       orgId: testOrg.id,
       userId: testUser.id,
-      role: "MANAGER",
+      role: "MEMBER",
       status: "ACTIVE",
     },
   });
 
-  console.log("Linked user to organization as MANAGER");
+  console.log("Linked test user to organization as MEMBER");
 
   // Create sample query definitions
   const queries = [
@@ -96,7 +148,7 @@ async function main() {
     const created = await prisma.queryDefinition.create({
       data: {
         orgId: testOrg.id,
-        createdByUserId: testUser.id,
+        createdByUserId: adminUser.id,
         name: query.name,
         description: query.description,
         sport: query.sport,
@@ -115,7 +167,7 @@ async function main() {
   // Create sample YouTube videos (using real public YouTube video IDs)
   const sampleVideos = [
     {
-      youtubeVideoId: "dQw4w9WgXcQ", // Rick Astley - popular test video that's always available
+      youtubeVideoId: "dQw4w9WgXcQ",
       title: "Sample Sports Highlight - Touchdown Play",
       description: "An incredible game-winning play demonstration.",
       channelTitle: "Sports Highlights",
@@ -128,7 +180,7 @@ async function main() {
       commentCount: 15000,
     },
     {
-      youtubeVideoId: "9bZkp7q19f0", // Gangnam Style - another reliable public video
+      youtubeVideoId: "9bZkp7q19f0",
       title: "Sample Basketball Highlights",
       description: "Triple-double performance highlights.",
       channelTitle: "Basketball Channel",
@@ -141,7 +193,7 @@ async function main() {
       commentCount: 8500,
     },
     {
-      youtubeVideoId: "kJQP7kiw5Fk", // Despacito - another reliable public video
+      youtubeVideoId: "kJQP7kiw5Fk",
       title: "Sample Baseball Home Run",
       description: "Amazing home run from spring training.",
       channelTitle: "Baseball Today",
@@ -154,7 +206,7 @@ async function main() {
       commentCount: 25000,
     },
     {
-      youtubeVideoId: "JGwWNGJdvx8", // Ed Sheeran - another reliable video
+      youtubeVideoId: "JGwWNGJdvx8",
       title: "Sample Betting Analysis Show",
       description: "Breaking down the odds and best bets.",
       channelTitle: "Betting Analysis",
@@ -193,7 +245,7 @@ async function main() {
       orgId: testOrg.id,
       queryDefinitionId: createdQueries[0].id,
       triggeredBy: "MANUAL",
-      triggeredByUserId: testUser.id,
+      triggeredByUserId: adminUser.id,
       status: "SUCCEEDED",
       videosFetched: 4,
       videosProcessed: 4,
@@ -289,7 +341,7 @@ async function main() {
   await prisma.logEntry.create({
     data: {
       orgId: testOrg.id,
-      createdByUserId: testUser.id,
+      createdByUserId: adminUser.id,
       sport: "NFL",
       title: "Great Mahomes clip",
       note: "This touchdown clip would be perfect for our Monday night segment. Make sure to highlight the scramble.",
@@ -298,7 +350,10 @@ async function main() {
   });
   console.log("Created sample log entry");
 
-  console.log("Seed completed successfully!");
+  console.log("\nSeed completed successfully!");
+  console.log("\nLogin credentials:");
+  console.log("  Admin: admin@clipscout.dev / admin123");
+  console.log("  User:  test@clipscout.dev / testuser123");
 }
 
 main()

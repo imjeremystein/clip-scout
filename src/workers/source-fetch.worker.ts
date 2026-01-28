@@ -8,6 +8,7 @@ import {
 } from "@/lib/queue";
 import { getAdapterOrThrow } from "@/server/services/sources";
 import { isOddsAdapter, isResultsAdapter } from "@/server/services/sources/base-adapter";
+import type { Prisma } from "@prisma/client";
 import type { RawNewsItem, RawOddsData, RawGameResult } from "@/server/services/sources/types";
 import { subDays } from "date-fns";
 
@@ -47,7 +48,7 @@ export async function processSourceFetch(job: Job<SourceFetchJobData>) {
     });
 
     // Get the adapter
-    const adapter = getAdapterOrThrow(source.type);
+    const adapter = await getAdapterOrThrow(source.type);
 
     // Fetch items
     const since = source.lastFetchAt || subDays(new Date(), 7);
@@ -128,7 +129,7 @@ export async function processSourceFetch(job: Job<SourceFetchJobData>) {
               homeScore: result.homeScore,
               awayScore: result.awayScore,
               status: result.status,
-              statsJson: result.statsJson,
+              statsJson: (result.statsJson ?? undefined) as Prisma.InputJsonValue | undefined,
               externalGameId: result.externalGameId,
             },
             create: {
@@ -141,7 +142,7 @@ export async function processSourceFetch(job: Job<SourceFetchJobData>) {
               homeScore: result.homeScore,
               awayScore: result.awayScore,
               status: result.status,
-              statsJson: result.statsJson,
+              statsJson: (result.statsJson ?? undefined) as Prisma.InputJsonValue | undefined,
               externalGameId: result.externalGameId,
             },
           });

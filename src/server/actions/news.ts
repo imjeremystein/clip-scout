@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
 import { sourceFetchQueue } from "@/lib/queue";
-import type { ClipMatchStatus, Sport } from "@prisma/client";
+import type { ClipMatchStatus, Sport, SourceType } from "@prisma/client";
+import { subMinutes } from "date-fns";
 
 /**
  * Dismiss a news item (mark as not relevant).
@@ -393,4 +394,189 @@ export async function getUnmatchedNewsCount() {
       importanceScore: { gte: 40 },
     },
   });
+}
+
+// Source types by content category
+const NEWS_SOURCE_TYPES: SourceType[] = [
+  "TWITTER_SEARCH",
+  "TWITTER_LIST",
+  "RSS_FEED",
+  "WEBSITE_SCRAPE",
+];
+const ODDS_SOURCE_TYPES: SourceType[] = [
+  "DRAFTKINGS_API",
+  "DRAFTKINGS_SCRAPE",
+];
+const RESULTS_SOURCE_TYPES: SourceType[] = ["ESPN_API"];
+
+/**
+ * Refresh sources by content type.
+ * Triggers active sources filtered by category, respecting 1-minute cooldown.
+ */
+export async function refreshResultsByType(
+  type: "all" | "news" | "odds" | "results"
+) {
+  const { orgId, userId } = await getTenantContext();
+
+  let sourceTypes: SourceType[] | undefined;
+  if (type === "news") sourceTypes = NEWS_SOURCE_TYPES;
+  else if (type === "odds") sourceTypes = ODDS_SOURCE_TYPES;
+  else if (type === "results") sourceTypes = RESULTS_SOURCE_TYPES;
+  // "all" leaves sourceTypes undefined to fetch all active sources
+
+  const sources = await prisma.source.findMany({
+    where: {
+      orgId,
+      status: "ACTIVE",
+      ...(sourceTypes ? { type: { in: sourceTypes } } : {}),
+    },
+  });
+
+  if (sources.length === 0) {
+    const categoryMessages: Record<string, string> = {
+      news: "No active news sources (RSS, Twitter, web scraper) configured",
+      odds: "No active odds sources (DraftKings) configured",
+      results: "No active results sources (ESPN API) configured",
+      all: "No active sources configured",
+    };
+    return {
+      success: false,
+      message: categoryMessages[type] || "No active sources found for this category",
+      queuedCount: 0,
+      skippedCount: 0,
+      totalSources: 0,
+    };
+  }
+
+  const now = new Date();
+  const cooldownThreshold = subMinutes(now, 1);
+  let queuedCount = 0;
+  let skippedCount = 0;
+
+  for (const source of sources) {
+    // Check cooldown: skip if fetched within the last minute
+    const recentRun = await prisma.sourceFetchRun.findFirst({
+      where: {
+        sourceId: source.id,
+        createdAt: { gte: cooldownThreshold },
+      },
+    });
+
+    if (recentRun) {
+      skippedCount++;
+      continue;
+    }
+
+    // Check for already running/queued jobs
+    const existingRun = await prisma.sourceFetchRun.findFirst({
+      where: {
+        sourceId: source.id,
+        status: { in: ["QUEUED", "RUNNING"] },
+      },
+    });
+
+    if (existingRun) {
+      skippedCount++;
+      continue;
+    }
+
+    // Create fetch run
+    const fetchRun = await prisma.sourceFetchRun.create({
+      data: {
+        sourceId: source.id,
+        status: "QUEUED",
+        triggeredBy: "MANUAL",
+        startedAt: now,
+      },
+    });
+
+    // Queue the job
+    await sourceFetchQueue.add(
+      "manual-refresh",
+      {
+        sourceId: source.id,
+        fetchRunId: fetchRun.id,
+        orgId,
+        triggeredBy: "MANUAL",
+      },
+      { priority: 1 }
+    );
+
+    queuedCount++;
+  }
+
+  // Create audit event
+  await prisma.auditEvent.create({
+    data: {
+      orgId,
+      actorUserId: userId,
+      eventType: "QUERY_RUN_STARTED",
+      entityType: "Source",
+      entityId: "refresh-by-type",
+      action: `Refreshed ${type} sources: ${queuedCount} queued, ${skippedCount} skipped`,
+    },
+  });
+
+  revalidatePath("/news");
+  revalidatePath("/odds");
+  revalidatePath("/results");
+  revalidatePath("/dashboard");
+
+  return {
+    success: true,
+    message: `Queued ${queuedCount} of ${sources.length} sources`,
+    queuedCount,
+    skippedCount,
+    totalSources: sources.length,
+  };
+}
+
+/**
+ * Get last fetch info for source types in a category.
+ */
+export async function getLastFetchInfo(
+  type: "all" | "news" | "odds" | "results"
+) {
+  const { orgId } = await getTenantContext();
+
+  let sourceTypes: SourceType[] | undefined;
+  if (type === "news") sourceTypes = NEWS_SOURCE_TYPES;
+  else if (type === "odds") sourceTypes = ODDS_SOURCE_TYPES;
+  else if (type === "results") sourceTypes = RESULTS_SOURCE_TYPES;
+
+  const sources = await prisma.source.findMany({
+    where: {
+      orgId,
+      status: "ACTIVE",
+      ...(sourceTypes ? { type: { in: sourceTypes } } : {}),
+    },
+    select: {
+      lastFetchAt: true,
+      lastSuccessAt: true,
+      nextFetchAt: true,
+    },
+    orderBy: { lastFetchAt: "desc" },
+  });
+
+  if (sources.length === 0) {
+    return { lastFetchAt: null, nextFetchAt: null, sourceCount: 0 };
+  }
+
+  // Most recent fetch across all sources in this category
+  const lastFetchAt = sources
+    .map((s) => s.lastFetchAt)
+    .filter(Boolean)
+    .sort((a, b) => b!.getTime() - a!.getTime())[0] ?? null;
+
+  // Nearest upcoming fetch
+  const nextFetchAt = sources
+    .map((s) => s.nextFetchAt)
+    .filter(Boolean)
+    .sort((a, b) => a!.getTime() - b!.getTime())[0] ?? null;
+
+  return {
+    lastFetchAt,
+    nextFetchAt,
+    sourceCount: sources.length,
+  };
 }

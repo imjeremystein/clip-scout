@@ -22,9 +22,9 @@ export default function InviteUserPage() {
           </Link>
         </Button>
         <div>
-          <h1 className="text-2xl font-bold">Invite User</h1>
+          <h1 className="text-2xl font-bold">Create User</h1>
           <p className="text-muted-foreground">
-            Send an invitation to a new user
+            Add a new user to the system
           </p>
         </div>
       </div>
@@ -33,8 +33,8 @@ export default function InviteUserPage() {
         <CardHeader>
           <CardTitle>User Details</CardTitle>
           <CardDescription>
-            Enter the email address of the user you want to invite. They will receive an email
-            with instructions to complete their registration.
+            Enter the new user&apos;s information and set their initial password.
+            They can change their password after signing in.
           </CardDescription>
         </CardHeader>
         <CardContent>
