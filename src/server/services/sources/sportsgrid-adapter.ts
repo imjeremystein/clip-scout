@@ -19,6 +19,8 @@ const SPORT_MAP: Record<Sport, string> = {
   NBA: "NBA",
   MLB: "MLB",
   NHL: "NHL",
+  CBB: "CBB",
+  CFB: "CFB",
   SOCCER: "Soccer",
   BOXING: "Boxing",
   SPORTS_BETTING: "NFL", // Default to NFL

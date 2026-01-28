@@ -39,6 +39,8 @@ enum Sport {
   MLB
   NBA
   NHL
+  CBB
+  CFB
   SOCCER
   BOXING
   SPORTS_BETTING

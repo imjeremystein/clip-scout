@@ -20,6 +20,8 @@ const SPORT_MAP: Record<Sport, { sport: string; league: string }> = {
   NBA: { sport: "basketball", league: "nba" },
   MLB: { sport: "baseball", league: "mlb" },
   NHL: { sport: "hockey", league: "nhl" },
+  CBB: { sport: "basketball", league: "mens-college-basketball" },
+  CFB: { sport: "football", league: "college-football" },
   SOCCER: { sport: "soccer", league: "usa.1" }, // MLS
   BOXING: { sport: "mma", league: "ufc" }, // Closest ESPN equivalent
   SPORTS_BETTING: { sport: "football", league: "nfl" }, // Default to NFL

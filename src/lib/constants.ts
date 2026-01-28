@@ -4,6 +4,8 @@ export const SPORTS = [
   { value: "NBA", label: "NBA Basketball" },
   { value: "MLB", label: "MLB Baseball" },
   { value: "NHL", label: "NHL Hockey" },
+  { value: "CBB", label: "College Basketball" },
+  { value: "CFB", label: "College Football" },
   { value: "SOCCER", label: "Soccer" },
   { value: "BOXING", label: "Boxing" },
   { value: "SPORTS_BETTING", label: "Sports Betting" },
