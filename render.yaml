@@ -1,0 +1,48 @@
+services:
+  # Main web application
+  - type: web
+    name: clip-scout-web
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: NEXTAUTH_URL
+        fromService:
+          type: web
+          name: clip-scout-web
+          property: url
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: clip-scout-redis
+          property: connectionString
+
+  # Background worker for job processing
+  - type: worker
+    name: clip-scout-worker
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:worker
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: clip-scout-redis
+          property: connectionString
+
+databases:
+  # Redis for job queues
+  - name: clip-scout-redis
+    plan: free
