@@ -7,6 +7,13 @@
  * It initializes all BullMQ workers and keeps the process alive.
  */
 
+// Polyfill Web APIs for Node.js (required by undici/cheerio)
+import { Blob, File } from "buffer";
+import { FormData } from "undici";
+(globalThis as any).Blob = Blob;
+(globalThis as any).File = File;
+(globalThis as any).FormData = FormData;
+
 import { Worker } from "bullmq";
 import { getRedis } from "@/lib/redis";
 import { QUEUE_NAMES } from "@/lib/queue";
