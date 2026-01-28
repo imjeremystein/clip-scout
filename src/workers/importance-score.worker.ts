@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { QUEUE_NAMES, ImportanceScoreJobData, clipPairQueue } from "@/lib/queue";
 import { extractEntities } from "@/server/services/entity-extraction.service";
 import { calculateImportanceScore } from "@/server/services/importance-scorer";
@@ -72,7 +72,7 @@ export function createImportanceScoreWorker() {
     QUEUE_NAMES.IMPORTANCE_SCORE,
     async (job) => processImportanceScore(job),
     {
-      connection: redis,
+      connection: getRedis(),
       concurrency: 5,
     }
   );

@@ -8,11 +8,12 @@
  */
 
 import { Worker } from "bullmq";
-import redis from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { QUEUE_NAMES } from "@/lib/queue";
 import { processSourceFetch, createSourceFetchWorker } from "./source-fetch.worker";
 import { processImportanceScore, createImportanceScoreWorker } from "./importance-score.worker";
 import { processClipPair, createClipPairWorker } from "./clip-pair.worker";
+import { createQueryRunWorker } from "./query-run.worker";
 
 const workers: Worker[] = [];
 
@@ -34,6 +35,11 @@ async function createWorkers() {
   workers.push(clipPairWorker);
   console.log(`  - ${QUEUE_NAMES.CLIP_PAIR} worker created`);
 
+  // Query Run Worker
+  const queryRunWorker = createQueryRunWorker();
+  workers.push(queryRunWorker);
+  console.log(`  - ${QUEUE_NAMES.QUERY_RUN} worker created`);
+
   console.log(`${workers.length} workers created and listening`);
 }
 
@@ -45,7 +51,7 @@ async function shutdown() {
     console.log(`  - ${worker.name} closed`);
   }
 
-  await redis.quit();
+  await getRedis().quit();
   console.log("Redis connection closed");
 
   process.exit(0);

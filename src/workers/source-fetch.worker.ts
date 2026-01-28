@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import {
   QUEUE_NAMES,
   SourceFetchJobData,
@@ -256,7 +256,7 @@ export function createSourceFetchWorker() {
     QUEUE_NAMES.SOURCE_FETCH,
     async (job) => processSourceFetch(job),
     {
-      connection: redis,
+      connection: getRedis(),
       concurrency: 3,
     }
   );

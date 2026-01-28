@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { QUEUE_NAMES, ClipPairJobData } from "@/lib/queue";
 import { findClipsForNews } from "@/server/services/clip-pairer";
 
@@ -74,7 +74,7 @@ export function createClipPairWorker() {
     QUEUE_NAMES.CLIP_PAIR,
     async (job) => processClipPair(job),
     {
-      connection: redis,
+      connection: getRedis(),
       concurrency: 3,
     }
   );

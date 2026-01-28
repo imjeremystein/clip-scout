@@ -1,6 +1,6 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "@/lib/prisma";
-import redis from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { QUEUE_NAMES, QueryRunJobData } from "@/lib/queue";
 import { searchVideos, upsertYouTubeVideo } from "@/lib/youtube";
 import {
@@ -359,7 +359,7 @@ export function createQueryRunWorker() {
     QUEUE_NAMES.QUERY_RUN,
     processQueryRun,
     {
-      connection: redis,
+      connection: getRedis(),
       concurrency: 2, // Process up to 2 runs concurrently
     }
   );
