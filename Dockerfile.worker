@@ -1,39 +1,16 @@
-# Dockerfile for Clip Scout Workers
-# Deploy this to Railway, Render, or Fly.io
-
-FROM node:20-alpine
-
-# Install dependencies for Prisma
-RUN apk add --no-cache openssl libc6-compat
+FROM node:18-alpine
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
-COPY pnpm-lock.yaml* ./
-COPY yarn.lock* ./
-
 # Install dependencies
-RUN if [ -f pnpm-lock.yaml ]; then \
-      npm install -g pnpm && pnpm install --frozen-lockfile; \
-    elif [ -f yarn.lock ]; then \
-      yarn install --frozen-lockfile; \
-    else \
-      npm ci --only=production; \
-    fi
+COPY package*.json ./
+RUN npm ci
 
-# Copy Prisma schema and generate client
-COPY prisma ./prisma/
-RUN npx prisma generate
-
-# Copy source code
+# Copy source
 COPY . .
 
-# Build TypeScript
-RUN npm run build:worker 2>/dev/null || npx tsc --project tsconfig.worker.json 2>/dev/null || echo "No build step configured"
+# Generate Prisma client
+RUN npx prisma generate
 
-# Set environment
-ENV NODE_ENV=production
-
-# Start the worker
-CMD ["npx", "tsx", "src/workers/index.ts"]
+# Run the worker (no Next.js build needed)
+CMD ["npm", "run", "start:worker"]
