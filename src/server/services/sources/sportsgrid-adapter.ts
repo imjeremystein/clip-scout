@@ -346,6 +346,20 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
       status = "DELAYED";
     }
 
+    // Calculate spread winner
+    const spreadWinner = this.calculateSpreadWinner(
+      game.home_score,
+      game.away_score,
+      game.home_spread_point
+    );
+
+    // Calculate total result
+    const totalResult = this.calculateTotalResult(
+      game.home_score,
+      game.away_score,
+      game.home_total_point
+    );
+
     return {
       externalGameId: game.key || undefined,
       homeTeam: game.home_full_name,
@@ -354,6 +368,8 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
       homeScore: game.home_score,
       awayScore: game.away_score,
       status,
+      spreadWinner,
+      totalResult,
       statsJson: {
         winTeam: game.win_team,
         headerDescription: game.header_description,
@@ -370,6 +386,66 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
       },
       rawData: game,
     };
+  }
+
+  /**
+   * Calculate who covered the spread.
+   * Home spread is from home team's perspective (e.g., "+6.5" means home is underdog).
+   */
+  private calculateSpreadWinner(
+    homeScore: number | undefined,
+    awayScore: number | undefined,
+    homeSpreadPoint: string | undefined
+  ): "HOME" | "AWAY" | "PUSH" | undefined {
+    if (homeScore === undefined || awayScore === undefined || !homeSpreadPoint) {
+      return undefined;
+    }
+
+    const spread = this.parseNumber(homeSpreadPoint);
+    if (spread === undefined) {
+      return undefined;
+    }
+
+    // Home team's adjusted score = homeScore + spread
+    // If home + spread > away, home covers
+    const homeAdjusted = homeScore + spread;
+
+    if (homeAdjusted > awayScore) {
+      return "HOME";
+    } else if (homeAdjusted < awayScore) {
+      return "AWAY";
+    } else {
+      return "PUSH";
+    }
+  }
+
+  /**
+   * Calculate over/under result.
+   * Total point is in format "U 232.5" or "O 232.5".
+   */
+  private calculateTotalResult(
+    homeScore: number | undefined,
+    awayScore: number | undefined,
+    totalPoint: string | undefined
+  ): "OVER" | "UNDER" | "PUSH" | undefined {
+    if (homeScore === undefined || awayScore === undefined || !totalPoint) {
+      return undefined;
+    }
+
+    const total = this.parseOverUnder(totalPoint);
+    if (total === undefined) {
+      return undefined;
+    }
+
+    const actualTotal = homeScore + awayScore;
+
+    if (actualTotal > total) {
+      return "OVER";
+    } else if (actualTotal < total) {
+      return "UNDER";
+    } else {
+      return "PUSH";
+    }
   }
 
   /**

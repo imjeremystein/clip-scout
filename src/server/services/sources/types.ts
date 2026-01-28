@@ -116,6 +116,8 @@ export interface RawGameResult {
   awayScore?: number;
   status: string;
   statsJson?: Record<string, unknown>;
+  spreadWinner?: "HOME" | "AWAY" | "PUSH"; // Who covered the spread
+  totalResult?: "OVER" | "UNDER" | "PUSH"; // Over/under result
   rawData: unknown;
 }
 

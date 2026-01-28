@@ -151,6 +151,8 @@ export async function fetchSourceDirect(
               status: gameResult.status,
               statsJson: (gameResult.statsJson ?? undefined) as Prisma.InputJsonValue | undefined,
               externalGameId: gameResult.externalGameId,
+              spreadWinner: gameResult.spreadWinner,
+              totalResult: gameResult.totalResult,
             },
             create: {
               orgId: source.orgId,
@@ -164,6 +166,8 @@ export async function fetchSourceDirect(
               status: gameResult.status,
               statsJson: (gameResult.statsJson ?? undefined) as Prisma.InputJsonValue | undefined,
               externalGameId: gameResult.externalGameId,
+              spreadWinner: gameResult.spreadWinner,
+              totalResult: gameResult.totalResult,
             },
           });
           resultsCreated++;
