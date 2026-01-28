@@ -7,15 +7,18 @@ let redisInstance: Redis | undefined;
 /**
  * Parse Redis URL and return connection options.
  * Works around ioredis compatibility issues with newer Redis versions.
+ * Supports both redis:// and rediss:// (TLS) protocols.
  */
 function getRedisOptions() {
   const url = process.env.REDIS_URL || "redis://localhost:6379";
   const parsed = new URL(url);
+  const useTls = parsed.protocol === "rediss:";
 
   return {
     host: parsed.hostname || "localhost",
     port: parseInt(parsed.port || "6379", 10),
     password: parsed.password || undefined,
+    tls: useTls ? {} : undefined,
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
     lazyConnect: true,
