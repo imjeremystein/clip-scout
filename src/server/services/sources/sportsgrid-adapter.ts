@@ -10,8 +10,21 @@ import type {
 } from "./types";
 import { BaseAdapter, type OddsAdapter, type ResultsAdapter } from "./base-adapter";
 
-// SportsGrid authenticated API endpoint
-const SPORTSGRID_API_URL = "https://app.sportsgrid.com/api/v1/getSingleSportGamesData";
+// SportsGrid authenticated API endpoints
+const SPORTSGRID_GAMES_URL = "https://app.sportsgrid.com/api/v1/getSingleSportGamesData";
+const SPORTSGRID_ODDS_URL = "https://app.sportsgrid.com/api/v1/getOddsbySportBook";
+const SPORTSGRID_SPORTSBOOKS_URL = "https://app.sportsgrid.com/api/v1/getAllSportsBook";
+
+// Available sportsbooks (from getAllSportsBook endpoint)
+export const AVAILABLE_SPORTSBOOKS = [
+  { key: "draftkings", title: "DraftKings" },
+  { key: "fanduel", title: "FanDuel" },
+  { key: "caesars", title: "Caesars" },
+  { key: "betmgm", title: "BetMGM" },
+  { key: "bet365", title: "bet365" },
+] as const;
+
+export type SportsbookKey = typeof AVAILABLE_SPORTSBOOKS[number]["key"];
 
 // Sport to SportsGrid sport name mapping (uppercase for new API)
 const SPORT_MAP: Record<Sport, string> = {
@@ -37,6 +50,7 @@ const RATE_LIMIT_WINDOW_MS = 60000;
 export interface SportsGridConfig {
   sport?: string; // Optional sport override (NBA, NFL, MLB, NHL, CBB, CFB)
   apiToken?: string; // Bearer token for authenticated API
+  sportsbook?: string; // Sportsbook to fetch odds from (draftkings, fanduel, caesars, betmgm, bet365)
 }
 
 /**
@@ -94,6 +108,12 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
     await this.waitForRateLimit();
 
     try {
+      // If sportsbook is specified, use the getOddsbySportBook endpoint
+      if (config.sportsbook) {
+        return await this.fetchOddsBySportsbook(sportName, config, date, options?.limit);
+      }
+
+      // Otherwise use the legacy getSingleSportGamesData endpoint
       const games = await this.fetchGames(sportName, config, date);
 
       const odds: RawOddsData[] = [];
@@ -228,7 +248,7 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
   }
 
   /**
-   * Fetch games from SportsGrid authenticated API.
+   * Fetch games from SportsGrid authenticated API (legacy endpoint).
    */
   private async fetchGames(
     sport: string,
@@ -243,7 +263,7 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
 
     const fetchDate = date || new Date().toISOString().split('T')[0]; // YYYY-MM-DD
 
-    const response = await fetch(SPORTSGRID_API_URL, {
+    const response = await fetch(SPORTSGRID_GAMES_URL, {
       method: "POST",
       headers: {
         "Accept": "application/json",
@@ -269,6 +289,149 @@ export class SportsGridAdapter extends BaseAdapter implements OddsAdapter, Resul
 
     // Games are in data.games array for the authenticated API
     return data?.data?.games || [];
+  }
+
+  /**
+   * Fetch odds from a specific sportsbook using the getOddsbySportBook endpoint.
+   */
+  private async fetchOddsBySportsbook(
+    sport: string,
+    config: SportsGridConfig,
+    date: string,
+    limit?: number
+  ): Promise<RawOddsData[]> {
+    const token = config.apiToken || process.env.SPORTSGRID_API_TOKEN;
+
+    if (!token) {
+      throw new Error("SportsGrid API token is required. Set SPORTSGRID_API_TOKEN env var or provide apiToken in config.");
+    }
+
+    // Map sportsbook key to display name for API
+    const sportsbookName = this.getSportsbookDisplayName(config.sportsbook!);
+
+    const response = await fetch(SPORTSGRID_ODDS_URL, {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: new URLSearchParams({
+        date,
+        sports: sport.toUpperCase(),
+        sportbook: sportsbookName,
+      }),
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      throw new Error(`SportsGrid Odds API error: ${response.status} ${response.statusText}`);
+    }
+
+    this.requestCount++;
+    this.rateLimitRemaining = Math.max(0, RATE_LIMIT_TOTAL - this.requestCount);
+
+    const data = await response.json();
+
+    if (!data?.success || !data?.data) {
+      return [];
+    }
+
+    const odds: RawOddsData[] = [];
+
+    // Data is keyed by game ID
+    for (const [gameId, gameData] of Object.entries(data.data)) {
+      if (limit && odds.length >= limit) {
+        break;
+      }
+
+      const game = gameData as SportsbookGameData;
+      const oddData = this.parseSportsbookOdds(gameId, game, sportsbookName);
+      if (oddData) {
+        odds.push(oddData);
+      }
+    }
+
+    return odds;
+  }
+
+  /**
+   * Parse odds from the getOddsbySportBook response format.
+   */
+  private parseSportsbookOdds(
+    gameId: string,
+    game: SportsbookGameData,
+    sportsbookName: string
+  ): RawOddsData | null {
+    if (!game.gameDetail) {
+      return null;
+    }
+
+    // Parse team names from "Washington @ Milwaukee" format
+    const teamMatch = game.gameDetail.match(/^(.+?)\s*@\s*(.+)$/);
+    if (!teamMatch) {
+      return null;
+    }
+
+    const awayTeam = teamMatch[1].trim();
+    const homeTeam = teamMatch[2].trim();
+
+    // Get odds for the specified sportsbook
+    const bookOdds = game.game_odds?.[sportsbookName];
+    if (!bookOdds) {
+      return null;
+    }
+
+    // Parse spread (e.g., "+2.5" or "-2.5")
+    const homeSpread = this.parseNumber(bookOdds.HomePointSpread);
+    const awaySpread = this.parseNumber(bookOdds.AwayPointSpread);
+
+    // Parse moneylines (e.g., "-135" or "+114")
+    const homeMoneyline = this.parseNumber(bookOdds.HomeMoneyLine);
+    const awayMoneyline = this.parseNumber(bookOdds.AwayMoneyLine);
+
+    // Parse over/under (e.g., "O 222.5" or "U 222.5")
+    const overUnder = this.parseOverUnder(bookOdds.HomeTotal || bookOdds.AwayTotal);
+
+    // Parse game date
+    let gameDate = new Date();
+    if (game.scheduled_date) {
+      const parsed = new Date(game.scheduled_date);
+      if (!isNaN(parsed.getTime())) {
+        gameDate = parsed;
+      }
+    }
+
+    return {
+      externalGameId: gameId,
+      homeTeam,
+      awayTeam,
+      gameDate,
+      homeMoneyline,
+      awayMoneyline,
+      spread: homeSpread, // Use home spread as the spread value
+      spreadJuice: -110, // Standard juice
+      overUnder,
+      overJuice: -110,
+      underJuice: -110,
+      sportsbook: sportsbookName.toLowerCase(), // Store as lowercase key
+      rawData: {
+        ...game,
+        sportsbook: sportsbookName,
+        homeSpread,
+        awaySpread,
+      },
+    };
+  }
+
+  /**
+   * Get the display name for a sportsbook key.
+   */
+  private getSportsbookDisplayName(key: string): string {
+    const sportsbook = AVAILABLE_SPORTSBOOKS.find(
+      (sb) => sb.key.toLowerCase() === key.toLowerCase()
+    );
+    return sportsbook?.title || key;
   }
 
   /**
@@ -598,6 +761,27 @@ interface SportsGridGame {
   duration?: string; // e.g., "End of 4th"
   header_description?: string; // e.g., "Wizards covered +6.5, U 232.5"
   playoff_description?: string; // e.g., "S. Sharpe 37 PRA, A. Sarr 44 PRA"
+}
+
+// Types for getOddsbySportBook endpoint response
+interface SportsbookGameData {
+  gameDetail?: string; // e.g., "Washington @ Milwaukee"
+  gameStatus?: string; // e.g., "Jan 29 7:00PM"
+  scheduled_status?: string;
+  srMatchID?: string;
+  scheduled_date?: string; // e.g., "2026-01-29 19:00:00"
+  is_live?: boolean;
+  source_feed_api?: string;
+  game_odds?: Record<string, SportsbookOdds>;
+}
+
+interface SportsbookOdds {
+  AwayPointSpread?: string; // e.g., "-2.5"
+  HomePointSpread?: string; // e.g., "+2.5"
+  AwayMoneyLine?: string; // e.g., "-135"
+  HomeMoneyLine?: string; // e.g., "+114"
+  AwayTotal?: string; // e.g., "O 222.5"
+  HomeTotal?: string; // e.g., "U 222.5"
 }
 
 // Export singleton instance

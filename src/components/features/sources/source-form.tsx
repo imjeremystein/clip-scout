@@ -249,16 +249,24 @@ export function SourceForm({ mode, initialData }: SourceFormProps) {
         return (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="sgApiToken">API Token</Label>
-              <Input
-                id="sgApiToken"
-                type="password"
-                placeholder="Bearer token (or use SPORTSGRID_API_TOKEN env var)"
-                value={(config.apiToken as string) || ""}
-                onChange={(e) => handleConfigChange("apiToken", e.target.value)}
-              />
+              <Label htmlFor="sgSportsbook">Sportsbook</Label>
+              <Select
+                value={(config.sportsbook as string) || "draftkings"}
+                onValueChange={(value) => handleConfigChange("sportsbook", value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select sportsbook" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draftkings">DraftKings</SelectItem>
+                  <SelectItem value="fanduel">FanDuel</SelectItem>
+                  <SelectItem value="caesars">Caesars</SelectItem>
+                  <SelectItem value="betmgm">BetMGM</SelectItem>
+                  <SelectItem value="bet365">bet365</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-xs text-muted-foreground">
-                Leave empty to use SPORTSGRID_API_TOKEN environment variable
+                Select which sportsbook to fetch odds from
               </p>
             </div>
             <div className="space-y-2">
@@ -281,6 +289,19 @@ export function SourceForm({ mode, initialData }: SourceFormProps) {
               </Select>
               <p className="text-xs text-muted-foreground">
                 Leave empty to use the source sport setting
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="sgApiToken">API Token</Label>
+              <Input
+                id="sgApiToken"
+                type="password"
+                placeholder="Bearer token (or use SPORTSGRID_API_TOKEN env var)"
+                value={(config.apiToken as string) || ""}
+                onChange={(e) => handleConfigChange("apiToken", e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave empty to use SPORTSGRID_API_TOKEN environment variable
               </p>
             </div>
             <p className="text-xs text-muted-foreground">

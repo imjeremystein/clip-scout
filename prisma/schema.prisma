@@ -835,6 +835,9 @@ model OddsSnapshot {
   gameDate       DateTime @map("game_date")
   externalGameId String?  @map("external_game_id") @db.VarChar(255)
 
+  // Sportsbook source
+  sportsbook String? @db.VarChar(50) // draftkings, fanduel, caesars, betmgm, bet365
+
   // Odds data
   homeMoneyline Int?   @map("home_moneyline") // -150
   awayMoneyline Int?   @map("away_moneyline") // +130

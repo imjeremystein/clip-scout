@@ -208,6 +208,7 @@ export async function fetchSourceDirect(
               overUnder: odds.overUnder,
               overJuice: odds.overJuice,
               underJuice: odds.underJuice,
+              sportsbook: odds.sportsbook,
             },
           });
           oddsCreated++;

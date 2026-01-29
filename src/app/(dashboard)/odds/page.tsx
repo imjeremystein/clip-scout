@@ -22,6 +22,15 @@ import { formatInTimeZone } from "date-fns-tz";
 import { getLastFetchInfo } from "@/server/actions/news";
 import { RefreshButton } from "@/components/features/sources/refresh-button";
 
+// Sportsbook display names and logos
+const SPORTSBOOK_INFO: Record<string, { name: string; logo?: string }> = {
+  draftkings: { name: "DraftKings" },
+  fanduel: { name: "FanDuel" },
+  caesars: { name: "Caesars" },
+  betmgm: { name: "BetMGM" },
+  bet365: { name: "bet365" },
+};
+
 export default async function OddsPage() {
   const { orgId } = await getTenantContext();
   const fetchInfo = await getLastFetchInfo("odds");
@@ -91,13 +100,29 @@ export default async function OddsPage() {
           </CardContent>
         </Card>
       ) : (
-        Object.entries(gamesBySport).map(([sport, sportGames]) => (
+        Object.entries(gamesBySport).map(([sport, sportGames]) => {
+          // Get unique sportsbooks for this sport
+          const sportsbooks = [...new Set(sportGames.map(g => g.sportsbook).filter(Boolean))];
+          const sportsbookDisplay = sportsbooks
+            .map(sb => SPORTSBOOK_INFO[sb!]?.name || sb)
+            .join(", ");
+
+          return (
           <Card key={sport}>
             <CardHeader>
-              <CardTitle>{sport}</CardTitle>
-              <CardDescription>
-                {sportGames.length} game{sportGames.length !== 1 ? "s" : ""} with odds
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>{sport}</CardTitle>
+                  <CardDescription>
+                    {sportGames.length} game{sportGames.length !== 1 ? "s" : ""} with odds
+                  </CardDescription>
+                </div>
+                {sportsbookDisplay && (
+                  <Badge variant="secondary" className="text-xs">
+                    {sportsbookDisplay}
+                  </Badge>
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
@@ -214,7 +239,8 @@ export default async function OddsPage() {
               </Table>
             </CardContent>
           </Card>
-        ))
+        );
+        })
       )}
     </div>
   );

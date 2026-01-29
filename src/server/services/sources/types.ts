@@ -45,6 +45,7 @@ export interface WebsiteScraperConfig {
 export interface SportsGridConfig {
   sport?: string; // Optional sport override (NBA, NFL, MLB, NHL, CBB, CFB)
   apiToken?: string; // Bearer token for authenticated API
+  sportsbook?: string; // Sportsbook for odds (draftkings, fanduel, caesars, betmgm, bet365)
 }
 
 export interface EspnConfig {
@@ -104,6 +105,7 @@ export interface RawOddsData {
   overUnder?: number;
   overJuice?: number;
   underJuice?: number;
+  sportsbook?: string; // draftkings, fanduel, caesars, betmgm, bet365
   rawData: unknown;
 }
 
