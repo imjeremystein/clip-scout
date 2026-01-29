@@ -120,7 +120,8 @@ function generateCronExpression(
  * Create a new query definition
  */
 export async function createQueryDefinition(formData: FormData) {
-  const { orgId, userId } = await getTenantContext();
+  try {
+    const { orgId, userId } = await getTenantContext();
 
   // Parse form data
   const keywordsRaw = formData.get("keywords") as string;
@@ -211,6 +212,12 @@ export async function createQueryDefinition(formData: FormData) {
   revalidatePath("/queries");
   revalidatePath("/dashboard");
   redirect(`/queries/${queryDef.id}`);
+  } catch (error) {
+    // Log the full error for debugging
+    console.error("createQueryDefinition error:", error);
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack");
+    throw error; // Re-throw to show error to user
+  }
 }
 
 /**
