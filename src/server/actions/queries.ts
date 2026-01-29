@@ -133,7 +133,7 @@ export async function createQueryDefinition(formData: FormData) {
     ? channelIdsRaw.split(",").map((c) => c.trim()).filter(Boolean)
     : [];
 
-  const scheduleTime = formData.get("scheduleTime") as string;
+  const scheduleTime = formData.get("scheduleTime") as string | null;
   const scheduleDayOfWeek = formData.get("scheduleDayOfWeek")
     ? parseInt(formData.get("scheduleDayOfWeek") as string, 10)
     : undefined;
@@ -150,7 +150,7 @@ export async function createQueryDefinition(formData: FormData) {
     scheduleType: formData.get("scheduleType") || "MANUAL",
     scheduleCron: formData.get("scheduleCron") || undefined,
     scheduleTimezone: formData.get("scheduleTimezone") || "America/New_York",
-    scheduleTime,
+    scheduleTime: scheduleTime || undefined,
     scheduleDayOfWeek,
   });
 
@@ -239,7 +239,7 @@ export async function updateQueryDefinition(queryId: string, formData: FormData)
     ? channelIdsRaw.split(",").map((c) => c.trim()).filter(Boolean)
     : [];
 
-  const scheduleTime = formData.get("scheduleTime") as string;
+  const scheduleTime = formData.get("scheduleTime") as string | null;
   const scheduleDayOfWeek = formData.get("scheduleDayOfWeek")
     ? parseInt(formData.get("scheduleDayOfWeek") as string, 10)
     : undefined;
@@ -256,7 +256,7 @@ export async function updateQueryDefinition(queryId: string, formData: FormData)
     scheduleType: formData.get("scheduleType") || "MANUAL",
     scheduleCron: formData.get("scheduleCron") || undefined,
     scheduleTimezone: formData.get("scheduleTimezone") || "America/New_York",
-    scheduleTime,
+    scheduleTime: scheduleTime || undefined,
     scheduleDayOfWeek,
   });
 
