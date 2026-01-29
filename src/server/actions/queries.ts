@@ -198,9 +198,14 @@ export async function createQueryDefinition(formData: FormData) {
     return newQuery;
   });
 
-  // Optionally run immediately
+  // Optionally run immediately (non-blocking - don't fail query creation if queue fails)
   if (formData.get("runImmediately") === "true") {
-    await startQueryRun(queryDef.id);
+    try {
+      await startQueryRun(queryDef.id);
+    } catch (error) {
+      console.error("Failed to start immediate query run:", error);
+      // Continue anyway - the query was created successfully
+    }
   }
 
   revalidatePath("/queries");
