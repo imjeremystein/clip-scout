@@ -157,9 +157,9 @@ export async function createQueryDefinition(formData: FormData) {
   // Calculate schedule values
   const scheduleCron =
     data.scheduleCron ||
-    generateCronExpression(data.scheduleType, scheduleTime, scheduleDayOfWeek);
+    generateCronExpression(data.scheduleType, data.scheduleTime, scheduleDayOfWeek);
   const nextRunAt = data.isScheduled
-    ? calculateNextRunAt(data.scheduleType, scheduleTime, scheduleDayOfWeek, data.scheduleTimezone)
+    ? calculateNextRunAt(data.scheduleType, data.scheduleTime, scheduleDayOfWeek, data.scheduleTimezone)
     : null;
 
   const queryDef = await prisma.$transaction(async (tx) => {
@@ -263,9 +263,9 @@ export async function updateQueryDefinition(queryId: string, formData: FormData)
   // Calculate schedule values
   const scheduleCron =
     data.scheduleCron ||
-    generateCronExpression(data.scheduleType, scheduleTime, scheduleDayOfWeek);
+    generateCronExpression(data.scheduleType, data.scheduleTime, scheduleDayOfWeek);
   const nextRunAt = data.isScheduled
-    ? calculateNextRunAt(data.scheduleType, scheduleTime, scheduleDayOfWeek, data.scheduleTimezone)
+    ? calculateNextRunAt(data.scheduleType, data.scheduleTime, scheduleDayOfWeek, data.scheduleTimezone)
     : null;
 
   await prisma.$transaction(async (tx) => {
