@@ -7,6 +7,8 @@ const SPORT_QUERY_TEMPLATES: Record<string, string[]> = {
   NBA: ["NBA", "basketball", "slam dunk", "three pointer"],
   MLB: ["MLB", "baseball", "home run", "pitcher"],
   NHL: ["NHL", "hockey", "goal", "hat trick"],
+  CBB: ["college basketball", "NCAA basketball", "march madness", "final four"],
+  CFB: ["college football", "NCAA football", "bowl game", "playoff"],
   SOCCER: ["soccer", "football", "goal", "premier league", "champions league"],
   BOXING: ["boxing", "knockout", "title fight", "heavyweight"],
   SPORTS_BETTING: ["sports betting", "odds", "spread", "moneyline", "over under"],

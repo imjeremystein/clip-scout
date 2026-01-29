@@ -36,7 +36,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 export default async function NewsPage({ searchParams }: NewsPageProps) {
   const params = await searchParams;
-  const sport = params.sport as "NFL" | "NBA" | "MLB" | "NHL" | "SOCCER" | "BOXING" | "SPORTS_BETTING" | undefined;
+  const sport = params.sport as "NFL" | "NBA" | "MLB" | "NHL" | "CBB" | "CFB" | "SOCCER" | "BOXING" | "SPORTS_BETTING" | undefined;
   const type = params.type;
   const minScore = params.minScore ? parseInt(params.minScore, 10) : 0;
 

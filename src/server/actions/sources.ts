@@ -22,7 +22,7 @@ const createSourceSchema = z.object({
     "SPORTSGRID_API",
     "ESPN_API",
   ]),
-  sport: z.enum(["NFL", "NBA", "MLB", "NHL", "SOCCER", "BOXING", "SPORTS_BETTING"]),
+  sport: z.enum(["NFL", "NBA", "MLB", "NHL", "SOCCER", "BOXING", "SPORTS_BETTING", "CBB", "CFB"]),
   config: sourceConfigSchema,
   isScheduled: z.boolean().default(true),
   scheduleType: z

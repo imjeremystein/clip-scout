@@ -24,7 +24,7 @@ interface QueryRunJobData {
 const queryDefinitionSchema = z.object({
   name: z.string().min(2).max(255),
   description: z.string().max(1000).optional(),
-  sport: z.enum(["NFL", "NBA", "MLB", "NHL", "SOCCER", "BOXING", "SPORTS_BETTING"]),
+  sport: z.enum(["NFL", "NBA", "MLB", "NHL", "SOCCER", "BOXING", "SPORTS_BETTING", "CBB", "CFB"]),
   keywords: z.array(z.string()).min(1).max(20),
   recencyDays: z.number().min(1).max(365).default(7),
   channelIds: z.array(z.string()).optional(),

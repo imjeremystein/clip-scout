@@ -31,6 +31,8 @@ const SPORTS: { value: Sport; label: string }[] = [
   { value: "MLB", label: "MLB" },
   { value: "NBA", label: "NBA" },
   { value: "NHL", label: "NHL" },
+  { value: "CBB", label: "College Basketball" },
+  { value: "CFB", label: "College Football" },
   { value: "SOCCER", label: "Soccer" },
   { value: "BOXING", label: "Boxing" },
   { value: "SPORTS_BETTING", label: "Sports Betting" },
