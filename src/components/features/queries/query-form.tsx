@@ -111,12 +111,6 @@ export function QueryForm({ mode, initialData }: QueryFormProps) {
     formData.set("runImmediately", runImmediately.toString());
 
     try {
-      // Debug: log form data
-      console.log("Submitting form with data:");
-      for (const [key, value] of formData.entries()) {
-        console.log(`  ${key}: ${value}`);
-      }
-
       if (mode === "create") {
         await createQueryDefinition(formData);
         toast.success("Query created successfully");
@@ -126,7 +120,6 @@ export function QueryForm({ mode, initialData }: QueryFormProps) {
         router.refresh();
       }
     } catch (error) {
-      console.error("Form submission error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to save query");
       setIsLoading(false);
     }
