@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/table";
 import { prisma } from "@/lib/prisma";
 import { getTenantContext } from "@/lib/tenant-prisma";
-import { format, startOfDay, endOfDay } from "date-fns";
+import { startOfDay, endOfDay } from "date-fns";
+import { formatInTimeZone } from "date-fns-tz";
 import { getLastFetchInfo } from "@/server/actions/news";
 import { RefreshButton } from "@/components/features/sources/refresh-button";
 
@@ -134,10 +135,10 @@ export default async function OddsPage() {
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            {format(game.gameDate, "EEE, MMM d")}
+                            {formatInTimeZone(game.gameDate, "America/New_York", "EEE, MMM d")}
                             <br />
                             <span className="text-muted-foreground">
-                              {format(game.gameDate, "h:mm a")}
+                              {formatInTimeZone(game.gameDate, "America/New_York", "h:mm a zzz")}
                             </span>
                           </div>
                         </TableCell>
