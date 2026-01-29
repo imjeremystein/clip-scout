@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { auth } from "./lib/auth";
 
 // Routes that don't require authentication
-const PUBLIC_PATHS = ["/login", "/api/auth"];
+const PUBLIC_PATHS = ["/login", "/api/auth", "/onboarding"];
 
 function isPublicPath(pathname: string): boolean {
   return PUBLIC_PATHS.some(
@@ -10,15 +11,10 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-export function middleware(request: NextRequest) {
+export default auth((request) => {
   const { pathname } = request.nextUrl;
-
-  // Check for session token (database session strategy uses this cookie name)
-  const sessionToken =
-    request.cookies.get("authjs.session-token")?.value ||
-    request.cookies.get("__Secure-authjs.session-token")?.value;
-
-  const isAuthenticated = !!sessionToken;
+  const session = request.auth;
+  const isAuthenticated = !!session?.user;
   const isPublic = isPublicPath(pathname);
 
   // Redirect root to dashboard
@@ -39,7 +35,7 @@ export function middleware(request: NextRequest) {
   }
 
   return NextResponse.next();
-}
+});
 
 export const config = {
   matcher: [
