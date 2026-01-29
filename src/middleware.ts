@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { auth } from "./lib/auth";
 
 // Routes that don't require authentication
 const PUBLIC_PATHS = ["/login", "/api/auth", "/onboarding"];
@@ -11,10 +10,15 @@ function isPublicPath(pathname: string): boolean {
   );
 }
 
-export default auth((request) => {
+export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const session = request.auth;
-  const isAuthenticated = !!session?.user;
+
+  // Check for session token (JWT strategy uses these cookie names)
+  const sessionToken =
+    request.cookies.get("authjs.session-token")?.value ||
+    request.cookies.get("__Secure-authjs.session-token")?.value;
+
+  const isAuthenticated = !!sessionToken;
   const isPublic = isPublicPath(pathname);
 
   // Redirect root to dashboard
@@ -35,7 +39,7 @@ export default auth((request) => {
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
   matcher: [
